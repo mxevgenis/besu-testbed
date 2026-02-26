@@ -1,0 +1,56 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: validator1
+  namespace: blockchain
+spec:
+  serviceName: validator1
+  replicas: 1
+  selector:
+    matchLabels:
+      app: validator1
+  template:
+    metadata:
+      labels:
+        app: validator1
+    spec:
+      containers:
+        - name: besu
+          image: hyperledger/besu:25.8.0
+          command:
+            - /bin/sh
+            - /scripts/besu-startup.sh
+          ports:
+            - containerPort: 30303
+            - containerPort: 8545
+            - containerPort: 9545
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: genesis
+              mountPath: /config
+            - name: keys
+              mountPath: /keys
+            - name: startup-script
+              mountPath: /scripts
+      volumes:
+        - name: genesis
+          configMap:
+            name: besu-genesis
+        - name: keys
+          secret:
+            secretName: validator1-secret
+        - name: startup-script
+          configMap:
+            name: besu-startup-script
+            defaultMode: 0755
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes:
+        - ReadWriteOnce
+      storageClassName: blockchain-local
+      resources:
+        requests:
+          storage: 90Gi

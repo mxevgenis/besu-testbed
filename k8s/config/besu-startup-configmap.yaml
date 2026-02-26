@@ -1,0 +1,79 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: besu-startup-script
+  namespace: blockchain
+data:
+  besu-startup.sh: |
+    #!/bin/sh
+    # Start Besu with runtime DNS->IP resolution for bootnodes (required by Besu).
+    set -e
+
+    NODE_NAME=$(hostname)
+    echo "Starting Besu node: $NODE_NAME"
+
+    # Public keys for each validator
+    PUBKEY_VAL1="bfed695ffb406c6953878b37d97a708af6817e6d8a0384485dcdbab581d1f96469341541abf8b2e808bd34e15406aa42a2dfa0a6d4d9eba098e56938a982db13"
+    PUBKEY_VAL2="f41078e727cea6eee2880df29ad783fcceadcab8f1a7df519731f6881d38c38635db07e796dae3488b14077eac3ffda20a1fd5b80a07b884de992f19f7b0a141"
+    PUBKEY_VAL3="733baae591c4c31a97b3b558cb7983da6e218e64bcaf07b5fca08d3df24ab631061dfda47d8c03cd85542a1f7ad6f96f5b97696bff82294d38d299fa6add8003"
+
+    # Function to resolve hostname to IP with retries
+    resolve_ip() {
+      local hostname=$1
+      local max_retries=30
+      local attempt=0
+      while [ $attempt -lt $max_retries ]; do
+        local ip=$(getent hosts "$hostname" 2>/dev/null | awk '{print $1}' | head -1)
+        if [ -n "$ip" ]; then
+          echo "$ip"
+          return 0
+        fi
+        attempt=$((attempt + 1))
+        sleep 1
+      done
+      echo ""
+      return 1
+    }
+
+    echo "Resolving peer addresses..."
+    IP_VAL1=$(resolve_ip "validator1-0.validator1.blockchain.svc.cluster.local") || IP_VAL1=""
+    IP_VAL2=$(resolve_ip "validator2-0.validator2.blockchain.svc.cluster.local") || IP_VAL2=""
+    IP_VAL3=$(resolve_ip "validator3-0.validator3.blockchain.svc.cluster.local") || IP_VAL3=""
+
+    echo "Resolved IPs: validator1=$IP_VAL1 validator2=$IP_VAL2 validator3=$IP_VAL3"
+
+    # Build bootnodes with resolved IPs (Besu requires numeric IPs, not DNS hostnames)
+    BOOTNODES=""
+    if [ -n "$IP_VAL1" ]; then
+      BOOTNODES="enode://$PUBKEY_VAL1@$IP_VAL1:30303"
+    fi
+    if [ -n "$IP_VAL2" ]; then
+      if [ -n "$BOOTNODES" ]; then BOOTNODES="$BOOTNODES,"; fi
+      BOOTNODES="$BOOTNODES""enode://$PUBKEY_VAL2@$IP_VAL2:30303"
+    fi
+    if [ -n "$IP_VAL3" ]; then
+      if [ -n "$BOOTNODES" ]; then BOOTNODES="$BOOTNODES,"; fi
+      BOOTNODES="$BOOTNODES""enode://$PUBKEY_VAL3@$IP_VAL3:30303"
+    fi
+
+    echo "Bootnodes: $BOOTNODES"
+    echo "Starting Besu..."
+
+    # Execute Besu with resolved IPs
+    exec /opt/besu/bin/besu \
+      --genesis-file=/config/genesis.json \
+      --data-path=/data \
+      --network-id=2026 \
+      --sync-mode=FULL \
+      --sync-min-peers=1 \
+      --node-private-key-file=/keys/key \
+      --min-gas-price=0 \
+      --rpc-http-enabled \
+      --rpc-http-api=ETH,NET,WEB3,ADMIN,TXPOOL,DEBUG,TRACE,QBFT \
+      --rpc-http-host=0.0.0.0 \
+      --host-allowlist=* \
+      --p2p-host=0.0.0.0 \
+      --bootnodes="$BOOTNODES" \
+      --metrics-enabled \
+      --metrics-host=0.0.0.0 \
+      --metrics-port=9545
