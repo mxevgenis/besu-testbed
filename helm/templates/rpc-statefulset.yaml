@@ -1,0 +1,72 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ .Values.rpc.name }}
+  namespace: {{ $.Values.namespace }}
+spec:
+  serviceName: {{ .Values.rpc.name }}-headless
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ .Values.rpc.name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.rpc.name }}
+    spec:
+      containers:
+      - name: besu
+        image: {{ $.Values.image.repository }}:{{ $.Values.image.tag }}
+        imagePullPolicy: {{ $.Values.image.pullPolicy }}
+        command:
+        - /scripts/besu-startup.sh
+        ports:
+        - containerPort: 8545
+          name: rpc
+        - containerPort: 30303
+          name: p2p
+        volumeMounts:
+        - name: data
+          mountPath: /data
+        - name: config
+          mountPath: /config
+        - name: scripts
+          mountPath: /scripts
+        - name: keys
+          mountPath: /keys
+      volumes:
+      - name: config
+        configMap:
+          name: genesis-config
+      - name: scripts
+        configMap:
+          name: besu-startup-script
+          defaultMode: 0755
+      - name: keys
+        secret:
+          secretName: {{ .Values.rpc.name }}-secret
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      storageClassName: blockchain-local
+      volumeName: {{ .Values.rpc.pvName }}
+      resources:
+        requests:
+          storage: 10Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.rpc.name }}-headless
+  namespace: {{ $.Values.namespace }}
+spec:
+  clusterIP: None
+  selector:
+    app: {{ .Values.rpc.name }}
+  ports:
+  - name: rpc
+    port: 8545
+  - name: p2p
+    port: 30303

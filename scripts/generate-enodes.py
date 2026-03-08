@@ -9,6 +9,7 @@ It also prints a comma-separated bootnodes list for use with --bootnodes if desi
 """
 import os
 import json
+import re
 from pathlib import Path
 
 try:
@@ -39,6 +40,8 @@ def pubkey_hex_from_priv(priv_bytes: bytes) -> str:
 def main():
     enodes = []
     for entry in sorted(KEYS_DIR.iterdir()):
+        if not entry.is_dir() or not re.fullmatch(r"(validator\d+|rpc-node)", entry.name):
+            continue
         keyfile = entry / "key"
         if not keyfile.exists():
             continue

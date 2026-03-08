@@ -1,0 +1,217 @@
+namespace: blockchain
+
+# Besu image
+image:
+  repository: hyperledger/besu
+  tag: "25.8.0"
+  pullPolicy: IfNotPresent
+
+# Validators configuration
+validators:
+  - name: validator1
+    pvName: pv-w1-disk1
+  - name: validator2
+    pvName: pv-w1-disk2
+  - name: validator3
+    pvName: pv-w1-disk3
+  - name: validator4
+    pvName: pv-w1-disk4
+  - name: validator5
+    pvName: pv-w1-disk5
+
+# RPC node configuration
+rpc:
+  name: rpc-node
+  pvName: pv-w2-disk1
+  key: ODhjYTgxNDk5NTkzNTI1MTY2MzJjZTZmYTgyNjBiYzhmMjZhYzI2OGNiZDZjOWRkMGQ3MzA5ZjRmZmE0ZWEzMA==
+
+# Genesis file content (base64 encoded or plain)
+genesis:
+  content: |
+    {
+      "config": {
+        "chainId": 1337,
+        "berlinBlock": 0,
+        "londonBlock": 0,
+        "shanghaiBlock": 0,
+        "cancunBlock": 0,
+        "qbft": {
+          "blockperiodseconds": 10,
+          "epochlength": 30000,
+          "requesttimeoutseconds": 20
+        }
+      },
+      "nonce": "0x0",
+      "timestamp": "0x0",
+      "gasLimit": "0x1fffffffffffff",
+      "difficulty": "0x1",
+      "mixHash": "0x63746963616c2062797a616e74696e65206661756c7420746f6c6572616e6365",
+      "coinbase": "0x0000000000000000000000000000000000000000",
+      "alloc": {},
+      "extraData": "0xf8e2a0000000000000000000000000000000000000000000000000000000000000000094efb2498aaa74672b3fcfef97142122242f5cda9f942860b3277be4f5b105ffbcb8ac5cf6712f91adf294ac48cd7901b33466d61f8eefca793718fefb1aed946d8657e85cf6d33d851b12174e486f492455a9d494e33c70e98e8dd5adfdf4b28c832a753d984c8d5994c48bc2a99679b575c20dab620a78608e87d57b08b8410000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+    }
+
+# Private keys (base64 encoded)
+keys:
+  validator1: YWY3OTFlZDgzZjdjMjcyYmEwYWQ1MjE5OGY4ZmYyNTQ3ZmVjOTc1NGI5ODNhMGUwYjBjZjhlNDBkZjQ2NjM4NAo=
+  validator2: NDhmYWE0MGI3YzI1MDBhZTI5N2QxZTY3MWExYWYzNjZmNTk1YTYzMWY4ZWQ2YWZlYzFmY2VjNzQ3Y2Y5ZDg3Ywo=
+  validator3: NzYwOWQxNzM0MjA5NzYxODZmM2JhNDA3OTAxZjg5NjE1NzlkODMzM2ZmYTRhMTM2NzJmNjM1MTUyZTI3ZTdjOQo=
+  validator4: NWVkMGViNmEzYmI2MDBiZWZiYWRjOThjNGVmMzMxYmJjMTc2YjM1OTg4MWUxNjBiNjc5NmYyZWU3Y2MyYmVjOQ==
+  validator5: M2FiODk2YzNlMWViZmI1M2E0Y2VjYzJmMjNjZjFlMTA0OTk4NGEyYTg3YmFiMGVkZTBiN2I3NTBiMWRhMWRkYw==
+
+# Scripts
+initScript:
+  content: |
+    #!/bin/sh
+    # Besu init container script
+    # Resolves DNS names to numeric IPs for static-nodes.json
+
+    set -e
+
+    echo "=== Besu Init Container ==="
+
+    # Public keys for each validator
+    PUBKEY_VAL1="bfed695ffb406c6953878b37d97a708af6817e6d8a0384485dcdbab581d1f96469341541abf8b2e808bd34e15406aa42a2dfa0a6d4d9eba098e56938a982db13"
+    PUBKEY_VAL2="f41078e727cea6eee2880df29ad783fcceadcab8f1a7df519731f6881d38c38635db07e796dae3488b14077eac3ffda20a1fd5b80a07b884de992f19f7b0a141"
+    PUBKEY_VAL3="733baae591c4c31a97b3b558cb7983da6e218e64bcaf07b5fca08d3df24ab631061dfda47d8c03cd85542a1f7ad6f96f5b97696bff82294d38d299fa6add8003"
+    PUBKEY_VAL4="6ea77df0489cf03782d2d4dc558a8b671693691be41b1ec61909abb2b73a583c10477a1bc55d18927b84ccff51e011cf80e1c5acb9d18c3891e2285651bf1ca2"
+    PUBKEY_VAL5="ec4b0f2aa21138ce8300de8c46c029270f6e60bfd806053de03f17a6273614d9d400d090eab75714e0c0e1628a8f197adebc600276321a29329891e7002c96b4"
+    PUBKEY_VAL6="ed411562892d4ea8ebfe64e82b464ba872c4038a086906c70c6b09240b523ff825a2a63adc28f88119da848d3cd65288532a403fcc624d2b7a843af0a5d04216"
+    PUBKEY_VAL6="ed411562892d4ea8ebfe64e82b464ba872c4038a086906c70c6b09240b523ff825a2a63adc28f88119da848d3cd65288532a403fcc624d2b7a843af0a5d04216"
+
+    mkdir -p /data
+
+    # Resolve each bootstrap peer to numeric IP
+    resolve_peer() {
+      local hostname=$1
+      local retries=30
+      for attempt in $(seq 1 $retries); do
+        local ip=$(nslookup "$hostname" 2>/dev/null | awk '/^Name:/{found=1} found && /^Address:/{print $2; exit}')
+        if [ -n "$ip" ] && [ "$ip" != "169.254.25.10" ]; then
+          echo "$ip"
+          return 0
+        fi
+        sleep 1
+      done
+      return 1
+    }
+
+    echo "Resolving peer DNS names to numeric IPs..."
+    IP_VAL1=$(resolve_peer "validator1-0.validator1-headless.besu.svc.cluster.local") && echo "VAL1: $IP_VAL1" || echo "Failed to resolve VAL1"
+    IP_VAL2=$(resolve_peer "validator2-0.validator2-headless.besu.svc.cluster.local") && echo "VAL2: $IP_VAL2" || echo "Failed to resolve VAL2"
+    IP_VAL3=$(resolve_peer "validator3-0.validator3-headless.besu.svc.cluster.local") && echo "VAL3: $IP_VAL3" || echo "Failed to resolve VAL3"
+    IP_VAL4=$(resolve_peer "validator4-0.validator4-headless.besu.svc.cluster.local") && echo "VAL4: $IP_VAL4" || echo "Failed to resolve VAL4"
+    IP_VAL5=$(resolve_peer "validator5-0.validator5-headless.besu.svc.cluster.local") && echo "VAL5: $IP_VAL5" || echo "Failed to resolve VAL5"
+    IP_VAL6=$(resolve_peer "rpc-node-0.rpc-node-headless.besu.svc.cluster.local") && echo "VAL6: $IP_VAL6" || echo "Failed to resolve VAL6"
+
+    if [ -z "$IP_VAL1" ] || [ -z "$IP_VAL2" ] || [ -z "$IP_VAL3" ] || [ -z "$IP_VAL4" ] || [ -z "$IP_VAL5" ] || [ -z "$IP_VAL6" ]; then
+      echo "ERROR: Failed to resolve all peer IPs"
+      exit 1
+    fi
+
+    cat > /data/static-nodes.json <<EOF
+    [
+      "enode://$PUBKEY_VAL1@$IP_VAL1:30303",
+      "enode://$PUBKEY_VAL2@$IP_VAL2:30303",
+      "enode://$PUBKEY_VAL3@$IP_VAL3:30303",
+      "enode://$PUBKEY_VAL4@$IP_VAL4:30303",
+      "enode://$PUBKEY_VAL5@$IP_VAL5:30303",
+      "enode://$PUBKEY_VAL6@$IP_VAL6:30303"
+    ]
+    EOF
+
+    echo "Static nodes file created with numeric IPs:"
+    cat /data/static-nodes.json
+
+    cp /config/genesis.json /data/genesis.json
+
+    GEN_HASH=$(sha256sum /data/genesis.json | awk '{print $1}')
+    echo "$GEN_HASH" > /data/genesis.hash
+
+    echo "Init complete."
+
+startupScript:
+  content: |
+    #!/bin/sh
+    # Besu startup wrapper - resolves peer DNS to IPs after pod gets IP
+    set -ex
+    # -x enables command tracing which prints each command before executing
+
+    echo "Waiting for pod IP..."
+    for i in $(seq 1 60); do
+      POD_IP=$(hostname -i 2>/dev/null | awk '{print $1}')
+      echo "  attempt $i: podIP=$POD_IP"
+      if [ -n "$POD_IP" ] && [ "$POD_IP" != "127.0.0.1" ]; then
+        break
+      fi
+      sleep 1
+    done
+
+    if [ -z "$POD_IP" ]; then
+      echo "WARNING: pod IP still empty after retries"
+    fi
+
+    PUBKEY_VAL1="bfed695ffb406c6953878b37d97a708af6817e6d8a0384485dcdbab581d1f96469341541abf8b2e808bd34e15406aa42a2dfa0a6d4d9eba098e56938a982db13"
+    PUBKEY_VAL2="f41078e727cea6eee2880df29ad783fcceadcab8f1a7df519731f6881d38c38635db07e796dae3488b14077eac3ffda20a1fd5b80a07b884de992f19f7b0a141"
+    PUBKEY_VAL3="733baae591c4c31a97b3b558cb7983da6e218e64bcaf07b5fca08d3df24ab631061dfda47d8c03cd85542a1f7ad6f96f5b97696bff82294d38d299fa6add8003"
+
+    # Query Kubernetes API for pod IP (requires service account token)
+    get_pod_ip() {
+      local pod=$1
+      local service=${pod%-0}-headless
+      local ip=$(nslookup "$pod.$service.blockchain.svc.cluster.local" 2>/dev/null | awk '/^Name:/{found=1} found && /^Address:/{print $2; exit}' | head -1)
+      echo "$ip"
+    }
+
+    echo "Querying API for peer pod IPs..."
+    IP1=$(get_pod_ip validator1-0) || IP1=""
+    IP2=$(get_pod_ip validator2-0) || IP2=""
+    IP3=$(get_pod_ip validator3-0) || IP3=""
+    IP4=$(get_pod_ip validator4-0) || IP4=""
+    IP5=$(get_pod_ip validator5-0) || IP5=""
+    IP6=$(get_pod_ip rpc-node-0) || IP6=""
+
+    mkdir -p /data
+    {
+      echo '['
+      [ -n "$IP1" ] && echo "  \"enode://$PUBKEY_VAL1@$IP1:30303\","
+      [ -n "$IP2" ] && echo "  \"enode://$PUBKEY_VAL2@$IP2:30303\","
+      [ -n "$IP3" ] && echo "  \"enode://$PUBKEY_VAL3@$IP3:30303\","
+      [ -n "$IP4" ] && echo "  \"enode://$PUBKEY_VAL4@$IP4:30303\","
+      [ -n "$IP5" ] && echo "  \"enode://$PUBKEY_VAL5@$IP5:30303\","
+      [ -n "$IP6" ] && echo "  \"enode://$PUBKEY_VAL6@$IP6:30303\","
+      echo ']'
+    } | sed '$ s/,$//' > /data/static-nodes.json
+
+    echo "Starting Besu..."
+    exec /opt/besu/bin/besu \
+      --genesis-file=/config/genesis.json \
+      --data-path=/data \
+      --network-id=2026 \
+      --sync-mode=FULL \
+      --node-private-key-file=/keys/key \
+      --min-gas-price=0 \
+      --rpc-http-enabled \
+      --rpc-http-api=ETH,NET,WEB3,ADMIN,TXPOOL,DEBUG,TRACE,QBFT \
+      --rpc-http-host=0.0.0.0 \
+      --host-allowlist=* \
+      --p2p-host=0.0.0.0 \
+      --p2p-port=30303 \
+      --static-nodes-file=/data/static-nodes.json \
+      --metrics-enabled \
+      --metrics-host=0.0.0.0 \
+      --metrics-port=9545
+
+# Service configuration
+service:
+  type: ClusterIP
+  ports:
+    - name: rpc
+      port: 8545
+      targetPort: 8545
+    - name: ws
+      port: 8546
+      targetPort: 8546
+    - name: p2p
+      port: 30303
+      targetPort: 30303

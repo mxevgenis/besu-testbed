@@ -1,0 +1,6 @@
+apiVersion: v2
+name: besu-qbft-network
+description: A Helm chart for deploying a Besu QBFT blockchain network with 3 validators
+type: application
+version: 0.1.0
+appVersion: "25.8.0"

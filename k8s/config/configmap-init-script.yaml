@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: besu-init-script
+  namespace: blockchain
+data:
+  besu-init.sh: |
+    #!/bin/sh
+    # No-op init script kept for compatibility.
+    set -e
+
+    echo "No init action required; static-nodes and genesis are mounted via ConfigMaps."

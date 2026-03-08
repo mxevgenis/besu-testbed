@@ -1,3 +1,20 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: validator3
+  namespace: blockchain
+spec:
+  clusterIP: None
+  selector:
+    app: validator3
+  ports:
+  - port: 30303
+    name: p2p
+  - port: 8545
+    name: rpc
+  - port: 9545
+    name: metrics
+---
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -15,41 +32,72 @@ spec:
         app: validator3
     spec:
       containers:
-        - name: besu
-          image: hyperledger/besu:25.8.0
-          command:
-            - /bin/sh
-            - /scripts/besu-startup.sh
-          ports:
-            - containerPort: 30303
-            - containerPort: 8545
-            - containerPort: 9545
-          volumeMounts:
-            - name: data
-              mountPath: /data
-            - name: genesis
-              mountPath: /config
-            - name: keys
-              mountPath: /keys
-            - name: startup-script
-              mountPath: /scripts
-      volumes:
-        - name: genesis
-          configMap:
-            name: besu-genesis
+      - name: besu
+        image: hyperledger/besu:25.8.0
+        command:
+        - /bin/sh
+        - /scripts/besu-startup.sh
+        args:
+        - --genesis-file=/config/genesis.json
+        - --data-path=/data
+        - --network-id=1337
+        - --sync-mode=FULL
+        - --sync-min-peers=1
+        - --node-private-key-file=/keys/key
+        - --min-gas-price=0
+        - --rpc-http-enabled
+        - --rpc-http-api=ETH,NET,WEB3,ADMIN,TXPOOL,DEBUG,TRACE,QBFT
+        - --rpc-http-host=0.0.0.0
+        - --rpc-http-port=8545
+        - --host-allowlist=*
+        - --p2p-host=0.0.0.0
+        - --p2p-port=30303
+        - --metrics-enabled
+        - --metrics-host=0.0.0.0
+        - --metrics-port=9545
+        ports:
+        - containerPort: 30303
+          name: p2p
+        - containerPort: 8545
+          name: rpc
+        - containerPort: 9545
+          name: metrics
+        readinessProbe:
+          tcpSocket:
+            port: 8545
+          initialDelaySeconds: 20
+          periodSeconds: 10
+        livenessProbe:
+          tcpSocket:
+            port: 8545
+          initialDelaySeconds: 60
+          periodSeconds: 20
+        volumeMounts:
+        - name: config
+          mountPath: /config
+        - name: data
+          mountPath: /data
         - name: keys
-          secret:
-            secretName: validator3-secret
+          mountPath: /keys
         - name: startup-script
-          configMap:
-            name: besu-startup-script
-            defaultMode: 0755
+          mountPath: /scripts
+      volumes:
+      - name: config
+        configMap:
+          name: besu-genesis
+      - name: keys
+        secret:
+          secretName: validator3-secret
+      - name: startup-script
+        configMap:
+          name: besu-startup-script
+          defaultMode: 0755
   volumeClaimTemplates:
   - metadata:
       name: data
     spec:
       accessModes:
-        - ReadWriteOnce
+      - ReadWriteOnce
       storageClassName: blockchain-local
       resources:
         requests:

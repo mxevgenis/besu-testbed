@@ -1,0 +1,80 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: besu-startup-script
+  namespace: {{ .Values.namespace }}
+data:
+  besu-startup.sh: |-
+    #!/bin/sh
+    set -e
+    
+    echo "=== Besu Startup Script ==="
+    
+    PUBKEY_VAL1="bfed695ffb406c6953878b37d97a708af6817e6d8a0384485dcdbab581d1f96469341541abf8b2e808bd34e15406aa42a2dfa0a6d4d9eba098e56938a982db13"
+    PUBKEY_VAL2="f41078e727cea6eee2880df29ad783fcceadcab8f1a7df519731f6881d38c38635db07e796dae3488b14077eac3ffda20a1fd5b80a07b884de992f19f7b0a141"
+    PUBKEY_VAL3="733baae591c4c31a97b3b558cb7983da6e218e64bcaf07b5fca08d3df24ab631061dfda47d8c03cd85542a1f7ad6f96f5b97696bff82294d38d299fa6add8003"
+    PUBKEY_VAL4="6ea77df0489cf03782d2d4dc558a8b671693691be41b1ec61909abb2b73a583c10477a1bc55d18927b84ccff51e011cf80e1c5acb9d18c3891e2285651bf1ca2"
+    PUBKEY_VAL5="ec4b0f2aa21138ce8300de8c46c029270f6e60bfd806053de03f17a6273614d9d400d090eab75714e0c0e1628a8f197adebc600276321a29329891e7002c96b4"
+    PUBKEY_VAL6="ed411562892d4ea8ebfe64e82b464ba872c4038a086906c70c6b09240b523ff825a2a63adc28f88119da848d3cd65288532a403fcc624d2b7a843af0a5d04216"
+
+    resolve_peer() {
+      local hostname=$1
+      local retries=30
+      for attempt in $(seq 1 $retries); do
+        ip=$(nslookup "$hostname" 2>/dev/null | awk '/^Address: [0-9]/ {print $2; exit}' | head -1)
+        if [ -n "$ip" ] && [ "$ip" != "127.0.0.1" ]; then
+          echo "$ip"
+          return 0
+        fi
+        sleep 1
+      done
+      return 1
+    }
+
+    echo "Resolving validator DNS names..."
+    IP1=$(resolve_peer "validator1-0.validator1-headless.{{ .Values.namespace }}.svc.cluster.local") || IP1=""
+    echo "validator1: $IP1"
+    IP2=$(resolve_peer "validator2-0.validator2-headless.{{ .Values.namespace }}.svc.cluster.local") || IP2=""
+    echo "validator2: $IP2"
+    IP3=$(resolve_peer "validator3-0.validator3-headless.{{ .Values.namespace }}.svc.cluster.local") || IP3=""
+    echo "validator3: $IP3"
+    IP4=$(resolve_peer "validator4-0.validator4-headless.{{ .Values.namespace }}.svc.cluster.local") || IP4=""
+    echo "validator4: $IP4"
+    IP5=$(resolve_peer "validator5-0.validator5-headless.{{ .Values.namespace }}.svc.cluster.local") || IP5=""
+    echo "validator5: $IP5"
+    IP6=$(resolve_peer "rpc-node-0.rpc-node-headless.{{ .Values.namespace }}.svc.cluster.local") || IP6=""
+    echo "rpc-node: $IP6"
+
+    mkdir -p /data
+    cat > /data/static-nodes.json <<EOF
+    [
+      "enode://$PUBKEY_VAL1@$IP1:30303",
+      "enode://$PUBKEY_VAL2@$IP2:30303",
+      "enode://$PUBKEY_VAL3@$IP3:30303",
+      "enode://$PUBKEY_VAL4@$IP4:30303",
+      "enode://$PUBKEY_VAL5@$IP5:30303",
+      "enode://$PUBKEY_VAL6@$IP6:30303"
+    ]
+    EOF
+
+    echo "Generated static-nodes.json:"
+    cat /data/static-nodes.json
+
+    echo "Starting Besu..."
+    exec /opt/besu/bin/besu \
+      --genesis-file=/config/genesis.json \
+      --data-path=/data \
+      --network-id=2026 \
+      --sync-mode=FULL \
+      --node-private-key-file=/keys/key \
+      --min-gas-price=0 \
+      --rpc-http-enabled \
+      --rpc-http-api=ETH,NET,WEB3,ADMIN,TXPOOL,DEBUG,TRACE,QBFT \
+      --rpc-http-host=0.0.0.0 \
+      --host-allowlist='*' \
+      --p2p-host=0.0.0.0 \
+      --p2p-port=30303 \
+      --static-nodes-file=/data/static-nodes.json \
+      --metrics-enabled \
+      --metrics-host=0.0.0.0 \
+      --metrics-port=9545
