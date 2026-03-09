@@ -50,7 +50,6 @@ spec:
         - --rpc-http-host=0.0.0.0
         - --rpc-http-port=8545
         - --host-allowlist=*
-        - --p2p-host=0.0.0.0
         - --p2p-port=30303
         - --metrics-enabled
         - --metrics-host=0.0.0.0

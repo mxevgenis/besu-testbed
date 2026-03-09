@@ -1,5 +1,5 @@
 #!/bin/sh
-# Resolve peer DNS names quickly and pass them as bootnodes.
+# Resolve peer DNS names and pass them as bootnodes.
 set -e
 
 # One-time cleanup for retained PVs with stale/invalid Besu DB content.
@@ -21,6 +21,7 @@ PUBKEY_VAL4="6ea77df0489cf03782d2d4dc558a8b671693691be41b1ec61909abb2b73a583c104
 PUBKEY_VAL5="ec4b0f2aa21138ce8300de8c46c029270f6e60bfd806053de03f17a6273614d9d400d090eab75714e0c0e1628a8f197adebc600276321a29329891e7002c96b4"
 
 BOOTNODES=""
+BOOTNODE_COUNT=0
 add_bootnode() {
   pubkey="$1"
   host="$2"
@@ -32,18 +33,42 @@ add_bootnode() {
     else
       BOOTNODES="$entry"
     fi
+    BOOTNODE_COUNT=$((BOOTNODE_COUNT + 1))
   fi
 }
 
-add_bootnode "$PUBKEY_VAL1" "validator1-0.validator1.blockchain.svc.cluster.local"
-add_bootnode "$PUBKEY_VAL2" "validator2-0.validator2.blockchain.svc.cluster.local"
-add_bootnode "$PUBKEY_VAL3" "validator3-0.validator3.blockchain.svc.cluster.local"
-add_bootnode "$PUBKEY_VAL4" "validator4-0.validator4.blockchain.svc.cluster.local"
-add_bootnode "$PUBKEY_VAL5" "validator5-0.validator5.blockchain.svc.cluster.local"
-add_bootnode "$PUBKEY_RPC"  "rpc-node-0.rpc-node.blockchain.svc.cluster.local"
+# Resolve pod IP for P2P advertisement (0.0.0.0 is not a routable peer address).
+POD_IP="$(hostname -i 2>/dev/null | awk '{print $1}')"
+if [ -z "$POD_IP" ]; then
+  POD_IP="$(resolve_ip "$(hostname).blockchain.svc.cluster.local" || true)"
+fi
 
-if [ -n "$BOOTNODES" ]; then
-  exec /opt/besu/bin/besu "$@" --bootnodes="$BOOTNODES"
+# Retry bootnode resolution for a short window to avoid startup races.
+attempt=0
+max_attempts=45
+MIN_BOOTNODES="${MIN_BOOTNODES:-3}"
+while [ "$attempt" -lt "$max_attempts" ]; do
+  BOOTNODES=""
+  BOOTNODE_COUNT=0
+  add_bootnode "$PUBKEY_VAL1" "validator1-0.validator1.blockchain.svc.cluster.local"
+  add_bootnode "$PUBKEY_VAL2" "validator2-0.validator2.blockchain.svc.cluster.local"
+  add_bootnode "$PUBKEY_VAL3" "validator3-0.validator3.blockchain.svc.cluster.local"
+  add_bootnode "$PUBKEY_VAL4" "validator4-0.validator4.blockchain.svc.cluster.local"
+  add_bootnode "$PUBKEY_VAL5" "validator5-0.validator5.blockchain.svc.cluster.local"
+  add_bootnode "$PUBKEY_RPC"  "rpc-node-0.rpc-node.blockchain.svc.cluster.local"
+  if [ "$BOOTNODE_COUNT" -ge "$MIN_BOOTNODES" ]; then
+    break
+  fi
+  attempt=$((attempt + 1))
+  sleep 1
+done
+
+if [ -n "$POD_IP" ] && [ -n "$BOOTNODES" ]; then
+  exec /opt/besu/bin/besu "$@" --p2p-host="$POD_IP" --nat-method=NONE --bootnodes="$BOOTNODES"
+elif [ -n "$POD_IP" ]; then
+  exec /opt/besu/bin/besu "$@" --p2p-host="$POD_IP" --nat-method=NONE
+elif [ -n "$BOOTNODES" ]; then
+  exec /opt/besu/bin/besu "$@" --nat-method=NONE --bootnodes="$BOOTNODES"
 else
-  exec /opt/besu/bin/besu "$@"
+  exec /opt/besu/bin/besu "$@" --nat-method=NONE
 fi
