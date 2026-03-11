@@ -53,6 +53,33 @@ kubectl rollout status statefulset/validator5 -n blockchain
 kubectl rollout status statefulset/rpc-node -n blockchain
 ```
 
+## Block Explorer (Optional)
+
+This deploys a Blockscout UI backed by an ephemeral Postgres (no PV). Data resets on pod restart. DB migrations run automatically on startup.
+
+1. Set a real `SECRET_KEY_BASE`:
+
+```bash
+openssl rand -hex 32
+```
+
+Put the output in `k8s/blockexplorer/blockscout.yaml` at `SECRET_KEY_BASE`.
+
+2. Deploy:
+
+```bash
+kubectl apply -f k8s/blockexplorer/postgres.yaml
+kubectl apply -f k8s/blockexplorer/blockscout.yaml
+```
+
+3. Access the UI:
+
+```bash
+kubectl port-forward -n blockchain svc/blockscout 4000:80
+```
+
+Open `http://127.0.0.1:4000` in a browser.
+
 ## Health Check Guide
 
 Use this checklist whenever you deploy/restart.

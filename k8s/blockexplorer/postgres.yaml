@@ -1,0 +1,47 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: blockscout-db
+  namespace: blockchain
+spec:
+  selector:
+    app: blockscout-db
+  ports:
+  - name: postgres
+    port: 5432
+    targetPort: 5432
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: blockscout-db
+  namespace: blockchain
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: blockscout-db
+  template:
+    metadata:
+      labels:
+        app: blockscout-db
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:14-alpine
+        ports:
+        - containerPort: 5432
+          name: postgres
+        env:
+        - name: POSTGRES_DB
+          value: blockscout
+        - name: POSTGRES_USER
+          value: blockscout
+        - name: POSTGRES_PASSWORD
+          value: blockscout
+        volumeMounts:
+        - name: data
+          mountPath: /var/lib/postgresql/data
+      volumes:
+      - name: data
+        emptyDir: {}
