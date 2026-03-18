@@ -206,6 +206,39 @@ kubectl delete pvc -n blockchain <pvc-name>
 
 Then run the Deploy section again.
 
+## Permanent Access (Ingress + NodePort)
+
+This setup exposes UIs through the Istio ingress gateway (HTTP NodePort) and exposes Besu RPC through a NodePort service.
+
+Current NodePort values:
+- Istio ingress HTTP: `32037` (from `istio-system/istio-ingressgateway`)
+- RPC HTTP: `30545` and WS: `30546` (from `blockchain/rpc-node-external`)
+- Kubernetes Dashboard: `30443` (from `kubernetes-dashboard/kubernetes-dashboard-nodeport`)
+
+Example node IP used below: `83.212.80.192`
+
+UI URLs (via Istio ingress gateway):
+- Kiali: `http://kiali.83.212.80.192.nip.io:32037`
+- Grafana: `http://grafana.83.212.80.192.nip.io:32037`
+- Prometheus: `http://prometheus.83.212.80.192.nip.io:32037`
+- Blockscout: `http://blockscout.83.212.80.192.nip.io:32037`
+
+Kubernetes Dashboard (NodePort HTTPS):
+- `https://83.212.80.192:30443`
+
+RPC endpoints:
+- HTTP: `http://83.212.80.192:30545`
+- WS: `ws://83.212.80.192:30546`
+
+MetaMask network fields:
+- Network Name: `besu-qbft`
+- RPC URL: `http://83.212.80.192:30545`
+- Chain ID: `1337`
+- Currency Symbol: `ETH`
+- Block Explorer URL: `http://blockscout.83.212.80.192.nip.io:32037`
+
+If you want to use a different node IP, replace `83.212.80.192` everywhere above and keep the same ports.
+
 ## Fast Troubleshooting
 
 1. Pods crash with `Option '--p2p-host' should be specified only once`.

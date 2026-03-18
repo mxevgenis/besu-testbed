@@ -1,0 +1,13 @@
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: kubernetes-dashboard-tls
+  namespace: kubernetes-dashboard
+spec:
+  host: kubernetes-dashboard.kubernetes-dashboard.svc.cluster.local
+  trafficPolicy:
+    tls:
+      mode: SIMPLE
+      sni: kubernetes-dashboard.kubernetes-dashboard.svc.cluster.local
+      subjectAltNames:
+      - kubernetes-dashboard.kubernetes-dashboard.svc.cluster.local

@@ -1,0 +1,16 @@
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: grafana-ui
+  namespace: monitoring
+spec:
+  hosts:
+  - grafana.83.212.80.192.nip.io
+  gateways:
+  - istio-system/shared-ui-gateway
+  http:
+  - route:
+    - destination:
+        host: monitoring-grafana.monitoring.svc.cluster.local
+        port:
+          number: 80

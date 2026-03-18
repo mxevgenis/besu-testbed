@@ -1,0 +1,16 @@
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: blockscout-ui
+  namespace: blockchain
+spec:
+  hosts:
+  - blockscout.83.212.80.192.nip.io
+  gateways:
+  - istio-system/shared-ui-gateway
+  http:
+  - route:
+    - destination:
+        host: blockscout.blockchain.svc.cluster.local
+        port:
+          number: 80

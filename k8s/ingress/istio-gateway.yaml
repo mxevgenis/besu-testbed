@@ -1,0 +1,19 @@
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: shared-ui-gateway
+  namespace: istio-system
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+  - port:
+      number: 80
+      name: http
+      protocol: HTTP
+    hosts:
+    - kiali.83.212.80.192.nip.io
+    - dashboard.83.212.80.192.nip.io
+    - grafana.83.212.80.192.nip.io
+    - prometheus.83.212.80.192.nip.io
+    - blockscout.83.212.80.192.nip.io
