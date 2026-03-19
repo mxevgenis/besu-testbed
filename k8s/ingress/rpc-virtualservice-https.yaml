@@ -1,0 +1,23 @@
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: rpc-https
+  namespace: blockchain
+  labels:
+    istio.io/rev: default
+spec:
+  hosts:
+  - snf-83472.ok-kno.grnetcloud.net
+  gateways:
+  - istio-system/shared-ui-gateway-https
+  http:
+  - match:
+    - uri:
+        prefix: /rpc
+    rewrite:
+      uri: /
+    route:
+    - destination:
+        host: rpc-node.blockchain.svc.cluster.local
+        port:
+          number: 8545

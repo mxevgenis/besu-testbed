@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: port80-forwarder
+  namespace: istio-system
+spec:
+  selector:
+    matchLabels:
+      app: port80-forwarder
+  template:
+    metadata:
+      labels:
+        app: port80-forwarder
+    spec:
+      hostNetwork: true
+      nodeSelector:
+        node-role.kubernetes.io/control-plane: ""
+      tolerations:
+      - key: "node-role.kubernetes.io/control-plane"
+        operator: "Exists"
+        effect: "NoSchedule"
+      containers:
+      - name: socat
+        image: alpine/socat:1.7.4.4
+        args:
+        - -d
+        - -d
+        - TCP4-LISTEN:80,fork,reuseaddr
+        - TCP4:83.212.80.192:32037
+        securityContext:
+          runAsUser: 0
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true

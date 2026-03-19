@@ -1,0 +1,20 @@
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: shared-ui-gateway-https
+  namespace: istio-system
+  labels:
+    istio.io/rev: default
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+  - port:
+      number: 443
+      name: https
+      protocol: HTTPS
+    tls:
+      mode: SIMPLE
+      credentialName: rpc-tls
+    hosts:
+    - snf-83472.ok-kno.grnetcloud.net

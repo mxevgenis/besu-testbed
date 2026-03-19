@@ -1,0 +1,12 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: rpc-cert
+  namespace: istio-system
+spec:
+  secretName: rpc-tls
+  issuerRef:
+    name: letsencrypt-http01
+    kind: ClusterIssuer
+  dnsNames:
+  - snf-83472.ok-kno.grnetcloud.net

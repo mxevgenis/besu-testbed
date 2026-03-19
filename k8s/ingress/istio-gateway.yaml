@@ -17,3 +17,4 @@ spec:
     - grafana.83.212.80.192.nip.io
     - prometheus.83.212.80.192.nip.io
     - blockscout.83.212.80.192.nip.io
+    - rpc.83.212.80.192.nip.io

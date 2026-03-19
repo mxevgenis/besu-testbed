@@ -213,6 +213,7 @@ This setup exposes UIs through the Istio ingress gateway (HTTP NodePort) and exp
 Current NodePort values:
 - Istio ingress HTTP: `32037` (from `istio-system/istio-ingressgateway`)
 - RPC HTTP: `30545` and WS: `30546` (from `blockchain/rpc-node-external`)
+- RPC HTTPS (nginx): `31933` (from `blockchain/rpc-nginx`)
 - Kubernetes Dashboard: `30443` (from `kubernetes-dashboard/kubernetes-dashboard-nodeport`)
 
 Example node IP used below: `83.212.80.192`
@@ -227,15 +228,17 @@ Kubernetes Dashboard (NodePort HTTPS):
 - `https://83.212.80.192:30443`
 
 RPC endpoints:
+- HTTPS (standard): `https://snf-83472.ok-kno.grnetcloud.net/rpc`
 - HTTP: `http://83.212.80.192:30545`
+- HTTPS (nginx): `https://snf-83472.ok-kno.grnetcloud.net:31933/rpc`
 - WS: `ws://83.212.80.192:30546`
 
 MetaMask network fields:
 - Network Name: `besu-qbft`
-- RPC URL: `http://83.212.80.192:30545`
+- RPC URL: `https://snf-83472.ok-kno.grnetcloud.net/rpc`
 - Chain ID: `1337`
 - Currency Symbol: `ETH`
-- Block Explorer URL: `http://blockscout.83.212.80.192.nip.io:32037`
+- Block Explorer URL: `https://snf-83472.ok-kno.grnetcloud.net/blockscout/`
 
 If you want to use a different node IP, replace `83.212.80.192` everywhere above and keep the same ports.
 

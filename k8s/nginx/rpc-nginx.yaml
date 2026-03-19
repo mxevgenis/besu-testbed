@@ -1,0 +1,135 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rpc-nginx-config
+  namespace: blockchain
+data:
+  nginx.conf: |
+    worker_processes 1;
+    events { worker_connections 1024; }
+    http {
+      resolver 10.233.0.3 valid=10s;
+      resolver_timeout 5s;
+      server {
+        listen 8443 ssl;
+        server_name snf-83472.ok-kno.grnetcloud.net;
+        ssl_certificate /etc/nginx/tls/tls.crt;
+        ssl_certificate_key /etc/nginx/tls/tls.key;
+
+        location /rpc {
+          set $rpc_upstream rpc-node.blockchain.svc.cluster.local:8545;
+          proxy_pass http://$rpc_upstream/;
+          proxy_http_version 1.1;
+          proxy_set_header Host $host;
+          proxy_set_header Connection "";
+        }
+
+        location /blockscout {
+          set $blockscout_upstream blockscout.blockchain.svc.cluster.local:80;
+          proxy_pass http://$blockscout_upstream/;
+          proxy_http_version 1.1;
+          proxy_set_header Host $host;
+          proxy_set_header X-Forwarded-Proto https;
+          proxy_set_header X-Forwarded-Host $host;
+          proxy_set_header X-Forwarded-Prefix /blockscout;
+          proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+          proxy_set_header Connection "";
+        }
+
+        location ~ ^/(css|js|images|assets|static|fonts)/ {
+          set $blockscout_upstream blockscout.blockchain.svc.cluster.local:80;
+          proxy_pass http://$blockscout_upstream;
+          proxy_http_version 1.1;
+          proxy_set_header Host $host;
+          proxy_set_header X-Forwarded-Proto https;
+          proxy_set_header X-Forwarded-Host $host;
+          proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+          proxy_set_header Connection "";
+        }
+
+        location ~ ^/(favicon\\.ico|manifest.*\\.webmanifest|robots\\.txt)$ {
+          set $blockscout_upstream blockscout.blockchain.svc.cluster.local:80;
+          proxy_pass http://$blockscout_upstream;
+          proxy_http_version 1.1;
+          proxy_set_header Host $host;
+          proxy_set_header X-Forwarded-Proto https;
+          proxy_set_header X-Forwarded-Host $host;
+          proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+          proxy_set_header Connection "";
+        }
+
+        location /socket/ {
+          set $blockscout_upstream blockscout.blockchain.svc.cluster.local:80;
+          proxy_pass http://$blockscout_upstream;
+          proxy_http_version 1.1;
+          proxy_set_header Host $host;
+          proxy_set_header X-Forwarded-Proto https;
+          proxy_set_header X-Forwarded-Host $host;
+          proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+          proxy_set_header Upgrade $http_upgrade;
+          proxy_set_header Connection "upgrade";
+        }
+
+        location / {
+          set $blockscout_upstream blockscout.blockchain.svc.cluster.local:80;
+          proxy_pass http://$blockscout_upstream;
+          proxy_http_version 1.1;
+          proxy_set_header Host $host;
+          proxy_set_header X-Forwarded-Proto https;
+          proxy_set_header X-Forwarded-Host $host;
+          proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+          proxy_set_header Connection "";
+        }
+      }
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rpc-nginx
+  namespace: blockchain
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rpc-nginx
+  template:
+    metadata:
+      labels:
+        app: rpc-nginx
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.25-alpine
+        ports:
+        - containerPort: 8443
+        volumeMounts:
+        - name: config
+          mountPath: /etc/nginx/nginx.conf
+          subPath: nginx.conf
+          readOnly: true
+        - name: tls
+          mountPath: /etc/nginx/tls
+          readOnly: true
+      volumes:
+      - name: config
+        configMap:
+          name: rpc-nginx-config
+      - name: tls
+        secret:
+          secretName: rpc-tls-nginx
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rpc-nginx
+  namespace: blockchain
+spec:
+  type: NodePort
+  selector:
+    app: rpc-nginx
+  ports:
+  - name: https
+    port: 443
+    targetPort: 8443
+    nodePort: 31933
