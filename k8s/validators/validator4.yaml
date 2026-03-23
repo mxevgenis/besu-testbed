@@ -64,12 +64,12 @@ spec:
         readinessProbe:
           tcpSocket:
             port: 8545
-          initialDelaySeconds: 20
+          initialDelaySeconds: 60
           periodSeconds: 10
         livenessProbe:
           tcpSocket:
             port: 8545
-          initialDelaySeconds: 60
+          initialDelaySeconds: 300
           periodSeconds: 20
         volumeMounts:
         - name: config

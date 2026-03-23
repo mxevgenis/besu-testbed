@@ -24,6 +24,22 @@ data:
       "difficulty": "0x1",
       "mixHash": "0x63746963616c2062797a616e74696e65206661756c7420746f6c6572616e6365",
       "coinbase": "0x0000000000000000000000000000000000000000",
-      "alloc": {},
+      "alloc": {
+        "0xf464bb3acbc339384a0967ba59a0e197974fd062": {
+          "balance": "0x56bc75e2d63100000"
+        },
+        "0xbd7ddb7a80093f15ef4814dc180874926e02a185": {
+          "balance": "0x56bc75e2d63100000"
+        },
+        "0xe82e09aad580bcc0c6bf67f2ecb92316830c08c7": {
+          "balance": "0x56bc75e2d63100000"
+        },
+        "0x831b0104b922a24f0d0d27024badb5a7cbc5bbc9": {
+          "balance": "0x56bc75e2d63100000"
+        },
+        "0x257d5134eadad2312a7391484ea6abb792c940cf": {
+          "balance": "0x56bc75e2d63100000"
+        }
+      },
       "extraData": "0xf88fa00000000000000000000000000000000000000000000000000000000000000000f86994efb2498aaa74672b3fcfef97142122242f5cda9f942860b3277be4f5b105ffbcb8ac5cf6712f91adf294ac48cd7901b33466d61f8eefca793718fefb1aed946d8657e85cf6d33d851b12174e486f492455a9d494e33c70e98e8dd5adfdf4b28c832a753d984c8d59c080c0"
     }

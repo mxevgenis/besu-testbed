@@ -3,9 +3,9 @@
 set -e
 
 # One-time cleanup for retained PVs with stale/invalid Besu DB content.
-if [ ! -f /data/.besu-initialized-v2 ]; then
+if [ ! -f /data/.besu-initialized-v3 ]; then
   rm -rf /data/*
-  touch /data/.besu-initialized-v2
+  touch /data/.besu-initialized-v3
 fi
 
 resolve_ip() {
@@ -37,6 +37,36 @@ add_bootnode() {
   fi
 }
 
+# Build static-nodes.json from resolved IPs so peers persist across restarts.
+STATIC_NODES_JSON="/data/static-nodes.json"
+build_static_nodes() {
+  nodes=""
+  add_static() {
+    pubkey="$1"
+    host="$2"
+    ip=$(resolve_ip "$host")
+    if [ -n "$ip" ]; then
+      entry="enode://${pubkey}@${ip}:30303"
+      if [ -n "$nodes" ]; then
+        nodes="${nodes},\"${entry}\""
+      else
+        nodes="\"${entry}\""
+      fi
+    fi
+  }
+
+  add_static "$PUBKEY_VAL1" "validator1-0.validator1.blockchain.svc.cluster.local"
+  add_static "$PUBKEY_VAL2" "validator2-0.validator2.blockchain.svc.cluster.local"
+  add_static "$PUBKEY_VAL3" "validator3-0.validator3.blockchain.svc.cluster.local"
+  add_static "$PUBKEY_VAL4" "validator4-0.validator4.blockchain.svc.cluster.local"
+  add_static "$PUBKEY_VAL5" "validator5-0.validator5.blockchain.svc.cluster.local"
+  add_static "$PUBKEY_RPC"  "rpc-node-0.rpc-node.blockchain.svc.cluster.local"
+
+  if [ -n "$nodes" ]; then
+    printf '[%s]\n' "$nodes" > "$STATIC_NODES_JSON"
+  fi
+}
+
 # Resolve pod IP for P2P advertisement (0.0.0.0 is not a routable peer address).
 POD_IP="$(hostname -i 2>/dev/null | awk '{print $1}')"
 if [ -z "$POD_IP" ]; then
@@ -63,12 +93,27 @@ while [ "$attempt" -lt "$max_attempts" ]; do
   sleep 1
 done
 
+# Build static-nodes.json after DNS warmup.
+build_static_nodes
+
 if [ -n "$POD_IP" ] && [ -n "$BOOTNODES" ]; then
+  if [ -s "$STATIC_NODES_JSON" ]; then
+    exec /opt/besu/bin/besu "$@" --p2p-host="$POD_IP" --nat-method=NONE --bootnodes="$BOOTNODES" --static-nodes-file="$STATIC_NODES_JSON"
+  fi
   exec /opt/besu/bin/besu "$@" --p2p-host="$POD_IP" --nat-method=NONE --bootnodes="$BOOTNODES"
 elif [ -n "$POD_IP" ]; then
+  if [ -s "$STATIC_NODES_JSON" ]; then
+    exec /opt/besu/bin/besu "$@" --p2p-host="$POD_IP" --nat-method=NONE --static-nodes-file="$STATIC_NODES_JSON"
+  fi
   exec /opt/besu/bin/besu "$@" --p2p-host="$POD_IP" --nat-method=NONE
 elif [ -n "$BOOTNODES" ]; then
+  if [ -s "$STATIC_NODES_JSON" ]; then
+    exec /opt/besu/bin/besu "$@" --nat-method=NONE --bootnodes="$BOOTNODES" --static-nodes-file="$STATIC_NODES_JSON"
+  fi
   exec /opt/besu/bin/besu "$@" --nat-method=NONE --bootnodes="$BOOTNODES"
 else
+  if [ -s "$STATIC_NODES_JSON" ]; then
+    exec /opt/besu/bin/besu "$@" --nat-method=NONE --static-nodes-file="$STATIC_NODES_JSON"
+  fi
   exec /opt/besu/bin/besu "$@" --nat-method=NONE
 fi

@@ -8,11 +8,127 @@ data:
     #!/bin/sh
     # Resolve peer DNS names and pass them as bootnodes.
     set -e
+    
+    # One-time cleanup for retained PVs with stale/invalid Besu DB content.
+    if [ ! -f /data/.besu-initialized-v3 ]; then
+      rm -rf /data/*
+      touch /data/.besu-initialized-v3
+    fi
+    
+    resolve_ip() {
+      hostname="$1"
+      getent hosts "$hostname" 2>/dev/null | awk '{print $1}' | head -1
+    }
+    
+    PUBKEY_RPC="ed411562892d4ea8ebfe64e82b464ba872c4038a086906c70c6b09240b523ff825a2a63adc28f88119da848d3cd65288532a403fcc624d2b7a843af0a5d04216"
+    PUBKEY_VAL1="bfed695ffb406c6953878b37d97a708af6817e6d8a0384485dcdbab581d1f96469341541abf8b2e808bd34e15406aa42a2dfa0a6d4d9eba098e56938a982db13"
+    PUBKEY_VAL2="f41078e727cea6eee2880df29ad783fcceadcab8f1a7df519731f6881d38c38635db07e796dae3488b14077eac3ffda20a1fd5b80a07b884de992f19f7b0a141"
+    PUBKEY_VAL3="733baae591c4c31a97b3b558cb7983da6e218e64bcaf07b5fca08d3df24ab631061dfda47d8c03cd85542a1f7ad6f96f5b97696bff82294d38d299fa6add8003"
+    PUBKEY_VAL4="6ea77df0489cf03782d2d4dc558a8b671693691be41b1ec61909abb2b73a583c10477a1bc55d18927b84ccff51e011cf80e1c5acb9d18c3891e2285651bf1ca2"
+    PUBKEY_VAL5="ec4b0f2aa21138ce8300de8c46c029270f6e60bfd806053de03f17a6273614d9d400d090eab75714e0c0e1628a8f197adebc600276321a29329891e7002c96b4"
+    
+    BOOTNODES=""
+    BOOTNODE_COUNT=0
+    add_bootnode() {
+      pubkey="$1"
+      host="$2"
+      ip=$(resolve_ip "$host")
+      if [ -n "$ip" ]; then
+        entry="enode://${pubkey}@${ip}:30303"
+        if [ -n "$BOOTNODES" ]; then
+          BOOTNODES="${BOOTNODES},${entry}"
+        else
+          BOOTNODES="$entry"
+        fi
+        BOOTNODE_COUNT=$((BOOTNODE_COUNT + 1))
+      fi
+    }
+    
+    # Build static-nodes.json from resolved IPs so peers persist across restarts.
+    STATIC_NODES_JSON="/data/static-nodes.json"
+    build_static_nodes() {
+      nodes=""
+      add_static() {
+        pubkey="$1"
+        host="$2"
+        ip=$(resolve_ip "$host")
+        if [ -n "$ip" ]; then
+          entry="enode://${pubkey}@${ip}:30303"
+          if [ -n "$nodes" ]; then
+            nodes="${nodes},\"${entry}\""
+          else
+            nodes="\"${entry}\""
+          fi
+        fi
+      }
+    
+      add_static "$PUBKEY_VAL1" "validator1-0.validator1.blockchain.svc.cluster.local"
+      add_static "$PUBKEY_VAL2" "validator2-0.validator2.blockchain.svc.cluster.local"
+      add_static "$PUBKEY_VAL3" "validator3-0.validator3.blockchain.svc.cluster.local"
+      add_static "$PUBKEY_VAL4" "validator4-0.validator4.blockchain.svc.cluster.local"
+      add_static "$PUBKEY_VAL5" "validator5-0.validator5.blockchain.svc.cluster.local"
+      add_static "$PUBKEY_RPC"  "rpc-node-0.rpc-node.blockchain.svc.cluster.local"
+    
+      if [ -n "$nodes" ]; then
+        printf '[%s]\n' "$nodes" > "$STATIC_NODES_JSON"
+      fi
+    }
+    
+    # Resolve pod IP for P2P advertisement (0.0.0.0 is not a routable peer address).
+    POD_IP="$(hostname -i 2>/dev/null | awk '{print $1}')"
+    if [ -z "$POD_IP" ]; then
+      POD_IP="$(resolve_ip "$(hostname).blockchain.svc.cluster.local" || true)"
+    fi
+    
+    # Retry bootnode resolution for a short window to avoid startup races.
+    attempt=0
+    max_attempts=45
+    MIN_BOOTNODES="${MIN_BOOTNODES:-3}"
+    while [ "$attempt" -lt "$max_attempts" ]; do
+      BOOTNODES=""
+      BOOTNODE_COUNT=0
+      add_bootnode "$PUBKEY_VAL1" "validator1-0.validator1.blockchain.svc.cluster.local"
+      add_bootnode "$PUBKEY_VAL2" "validator2-0.validator2.blockchain.svc.cluster.local"
+      add_bootnode "$PUBKEY_VAL3" "validator3-0.validator3.blockchain.svc.cluster.local"
+      add_bootnode "$PUBKEY_VAL4" "validator4-0.validator4.blockchain.svc.cluster.local"
+      add_bootnode "$PUBKEY_VAL5" "validator5-0.validator5.blockchain.svc.cluster.local"
+      add_bootnode "$PUBKEY_RPC"  "rpc-node-0.rpc-node.blockchain.svc.cluster.local"
+      if [ "$BOOTNODE_COUNT" -ge "$MIN_BOOTNODES" ]; then
+        break
+      fi
+      attempt=$((attempt + 1))
+      sleep 1
+    done
+    
+    # Build static-nodes.json after DNS warmup.
+    build_static_nodes
+    
+    if [ -n "$POD_IP" ] && [ -n "$BOOTNODES" ]; then
+      if [ -s "$STATIC_NODES_JSON" ]; then
+        exec /opt/besu/bin/besu "$@" --p2p-host="$POD_IP" --nat-method=NONE --bootnodes="$BOOTNODES" --static-nodes-file="$STATIC_NODES_JSON"
+      fi
+      exec /opt/besu/bin/besu "$@" --p2p-host="$POD_IP" --nat-method=NONE --bootnodes="$BOOTNODES"
+    elif [ -n "$POD_IP" ]; then
+      if [ -s "$STATIC_NODES_JSON" ]; then
+        exec /opt/besu/bin/besu "$@" --p2p-host="$POD_IP" --nat-method=NONE --static-nodes-file="$STATIC_NODES_JSON"
+      fi
+      exec /opt/besu/bin/besu "$@" --p2p-host="$POD_IP" --nat-method=NONE
+    elif [ -n "$BOOTNODES" ]; then
+      if [ -s "$STATIC_NODES_JSON" ]; then
+        exec /opt/besu/bin/besu "$@" --nat-method=NONE --bootnodes="$BOOTNODES" --static-nodes-file="$STATIC_NODES_JSON"
+      fi
+      exec /opt/besu/bin/besu "$@" --nat-method=NONE --bootnodes="$BOOTNODES"
+    else
+      if [ -s "$STATIC_NODES_JSON" ]; then
+        exec /opt/besu/bin/besu "$@" --nat-method=NONE --static-nodes-file="$STATIC_NODES_JSON"
+      fi
+      exec /opt/besu/bin/besu "$@" --nat-method=NONE
+    fi
 
     # One-time cleanup for retained PVs with stale/invalid Besu DB content.
-    if [ ! -f /data/.besu-initialized-v2 ]; then
+    if [ ! -f /data/.besu-initialized-v3 ]; then
       rm -rf /data/*
-      touch /data/.besu-initialized-v2
+      touch /data/.besu-initialized-v3
     fi
 
     resolve_ip() {
@@ -52,8 +168,8 @@ data:
 
     # Retry bootnode resolution for a short window to avoid startup races.
     attempt=0
-    max_attempts=45
-    MIN_BOOTNODES="${MIN_BOOTNODES:-3}"
+    max_attempts=10
+    MIN_BOOTNODES="${MIN_BOOTNODES:-0}"
     while [ "$attempt" -lt "$max_attempts" ]; do
       BOOTNODES=""
       BOOTNODE_COUNT=0

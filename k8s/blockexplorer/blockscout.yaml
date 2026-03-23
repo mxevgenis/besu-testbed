@@ -44,7 +44,7 @@ spec:
         - /app/bin/blockscout eval "Elixir.Explorer.ReleaseTasks.create_and_migrate()"
         env:
         - name: DATABASE_URL
-          value: postgresql://blockscout:blockscout@blockscout-db.blockchain.svc.cluster.local:5432/blockscout?ssl=false
+          value: postgresql://blockscout:blockscout@blockscout-db:5432/blockscout?ssl=false
         - name: ECTO_USE_SSL
           value: "false"
         - name: SECRET_KEY_BASE
@@ -64,7 +64,7 @@ spec:
           name: http
         env:
         - name: DATABASE_URL
-          value: postgresql://blockscout:blockscout@blockscout-db.blockchain.svc.cluster.local:5432/blockscout?ssl=false
+          value: postgresql://blockscout:blockscout@blockscout-db:5432/blockscout?ssl=false
         - name: ECTO_USE_SSL
           value: "false"
         - name: SECRET_KEY_BASE
@@ -73,11 +73,13 @@ spec:
               name: blockscout-secrets
               key: SECRET_KEY_BASE
         - name: ETHEREUM_JSONRPC_HTTP_URL
-          value: http://rpc-node.blockchain.svc.cluster.local:8545
+          value: http://rpc-node:8545
         - name: ETHEREUM_JSONRPC_WS_URL
-          value: ws://rpc-node.blockchain.svc.cluster.local:8546
+          value: ws://rpc-node:8546
         - name: ETHEREUM_JSONRPC_TRACE_URL
-          value: http://rpc-node.blockchain.svc.cluster.local:8545
+          value: http://rpc-node:8545
+        - name: ETHEREUM_JSONRPC_VARIANT
+          value: besu
         - name: CHAIN_ID
           value: "1337"
         - name: NETWORK

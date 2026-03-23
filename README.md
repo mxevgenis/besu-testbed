@@ -146,6 +146,13 @@ curl -s -X POST http://127.0.0.1:8545 \
 Expected:
 - non-empty array with enodes and remote addresses
 
+### Latest Verified Health Snapshot
+
+Recorded on 2026-03-23 17:10 UTC after restoring full peer mesh.
+
+- Block height: `0x7` (7) and advancing
+- Peer count: `0x5` on `rpc-node` and all validators
+
 ## Interact With The Network
 
 With port-forward still active:
@@ -239,6 +246,11 @@ MetaMask network fields:
 - Chain ID: `1337`
 - Currency Symbol: `ETH`
 - Block Explorer URL: `https://snf-83472.ok-kno.grnetcloud.net/blockscout/`
+
+Prefunded accounts (genesis alloc):
+- Generated in `genesis/prefunded-accounts.json`
+- Each has `100 ETH` balance
+- Treat these keys as test-only and rotate for production
 
 If you want to use a different node IP, replace `83.212.80.192` everywhere above and keep the same ports.
 
