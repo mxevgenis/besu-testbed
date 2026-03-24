@@ -1,0 +1,92 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-besu-validators
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  besu-qbft-validators.json: |
+    {
+      "uid": "besu-qbft-validators",
+      "title": "Besu QBFT Validators",
+      "timezone": "utc",
+      "schemaVersion": 39,
+      "version": 1,
+      "refresh": "10s",
+      "tags": ["besu", "qbft", "validators"],
+      "templating": {
+        "list": [
+          {
+            "name": "DS_PROMETHEUS",
+            "type": "datasource",
+            "query": "prometheus",
+            "current": {
+              "text": "Prometheus",
+              "value": "Prometheus"
+            }
+          },
+          {
+            "name": "service",
+            "type": "query",
+            "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+            "query": "label_values(ethereum_blockchain_height, service)",
+            "current": { "text": "All", "value": ".*" }
+          }
+        ]
+      },
+      "panels": [
+        {
+          "type": "timeseries",
+          "title": "Block Height by Validator",
+          "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "targets": [
+            {
+              "expr": "ethereum_blockchain_height{service=~\"$service\"}",
+              "legendFormat": "{{service}}",
+              "refId": "A"
+            }
+          ]
+        },
+        {
+          "type": "timeseries",
+          "title": "Peer Count by Validator",
+          "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "targets": [
+            {
+              "expr": "besu_peers_peer_count_by_client{client=\"Besu\",service=~\"$service\"}",
+              "legendFormat": "{{service}}",
+              "refId": "A"
+            }
+          ]
+        },
+        {
+          "type": "timeseries",
+          "title": "Block Production Rate (per validator)",
+          "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "targets": [
+            {
+              "expr": "rate(ethereum_blockchain_height{service=~\"$service\"}[2m])",
+              "legendFormat": "{{service}}",
+              "refId": "A"
+            }
+          ]
+        },
+        {
+          "type": "timeseries",
+          "title": "RPC Errors (non BLOCK_NOT_FOUND)",
+          "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "targets": [
+            {
+              "expr": "rate(besu_rpc_errors_count_total{errorType!=\"BLOCK_NOT_FOUND\",service=~\"$service\"}[5m])",
+              "legendFormat": "{{service}}",
+              "refId": "A"
+            }
+          ]
+        }
+      ]
+    }

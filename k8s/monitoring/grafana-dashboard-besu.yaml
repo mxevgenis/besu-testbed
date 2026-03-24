@@ -1,0 +1,104 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-besu
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  besu-qbft-overview.json: |
+    {
+      "uid": "besu-qbft-overview",
+      "title": "Besu QBFT Overview",
+      "timezone": "utc",
+      "schemaVersion": 39,
+      "version": 1,
+      "refresh": "10s",
+      "tags": ["besu", "qbft", "blockchain"],
+      "templating": {
+        "list": [
+          {
+            "name": "DS_PROMETHEUS",
+            "type": "datasource",
+            "query": "prometheus",
+            "current": {
+              "text": "Prometheus",
+              "value": "Prometheus"
+            }
+          }
+        ]
+      },
+      "panels": [
+        {
+          "type": "timeseries",
+          "title": "Block Height",
+          "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "targets": [
+            {
+              "expr": "ethereum_blockchain_height",
+              "legendFormat": "{{service}}",
+              "refId": "A"
+            }
+          ]
+        },
+        {
+          "type": "timeseries",
+          "title": "Peer Count (Besu)",
+          "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "targets": [
+            {
+              "expr": "sum by (service) (besu_peers_peer_count_by_client{client=\"Besu\"})",
+              "legendFormat": "{{service}}",
+              "refId": "A"
+            }
+          ]
+        },
+        {
+          "type": "timeseries",
+          "title": "RPC Errors (non BLOCK_NOT_FOUND)",
+          "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "targets": [
+            {
+              "expr": "sum by (service) (rate(besu_rpc_errors_count_total{errorType!=\"BLOCK_NOT_FOUND\"}[5m]))",
+              "legendFormat": "{{service}}",
+              "refId": "A"
+            }
+          ]
+        },
+        {
+          "type": "stat",
+          "title": "Active RPC HTTP Connections",
+          "gridPos": { "x": 12, "y": 8, "w": 6, "h": 4 },
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "targets": [
+            {
+              "expr": "besu_rpc_active_http_connection_count",
+              "legendFormat": "{{service}}",
+              "refId": "A"
+            }
+          ],
+          "options": {
+            "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+          }
+        },
+        {
+          "type": "stat",
+          "title": "Active RPC WS Connections",
+          "gridPos": { "x": 18, "y": 8, "w": 6, "h": 4 },
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "targets": [
+            {
+              "expr": "besu_rpc_active_ws_connection_count",
+              "legendFormat": "{{service}}",
+              "refId": "A"
+            }
+          ],
+          "options": {
+            "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+          }
+        }
+      ]
+    }

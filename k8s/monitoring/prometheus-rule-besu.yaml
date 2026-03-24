@@ -1,0 +1,43 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: besu-alerts
+  namespace: monitoring
+  labels:
+    release: monitoring
+spec:
+  groups:
+    - name: besu.rules
+      rules:
+        - alert: BesuPeerCountLow
+          expr: sum by (service) (besu_peers_peer_count_by_client{client="Besu"}) < 3
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Besu peer count low ({{ $labels.service }})"
+            description: "Peer count has been below 3 for more than 5 minutes."
+        - alert: BesuBlockStalled
+          expr: changes(ethereum_blockchain_height{service="rpc-node"}[5m]) == 0
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Besu block production stalled"
+            description: "Chain head height on rpc-node has not advanced for 5 minutes."
+        - alert: BesuRpcErrorsHigh
+          expr: sum by (service) (rate(besu_rpc_errors_count_total{errorType!="BLOCK_NOT_FOUND"}[5m])) > 1
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Besu RPC error rate elevated ({{ $labels.service }})"
+            description: "Non BLOCK_NOT_FOUND RPC errors are occurring at >1 req/s for 5 minutes."
+        - alert: BesuNoPeersAndNoBlocks
+          expr: (sum by (service) (besu_peers_peer_count_by_client{client="Besu"}) == 0) and (changes(ethereum_blockchain_height{service="rpc-node"}[5m]) == 0)
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Besu has no peers and block production is stalled"
+            description: "Zero peers detected and chain head has not advanced for 5 minutes."

@@ -254,6 +254,102 @@ Prefunded accounts (genesis alloc):
 
 If you want to use a different node IP, replace `83.212.80.192` everywhere above and keep the same ports.
 
+## Observability (Grafana, Prometheus, Alertmanager)
+
+Besu exposes Prometheus metrics on port `9545`. This repo installs:
+- ServiceMonitor: `k8s/monitoring/servicemonitor-besu.yaml`
+- Grafana dashboards: `k8s/monitoring/grafana-dashboard-besu.yaml` and `k8s/monitoring/grafana-dashboard-besu-validators.yaml`
+- Alert rules: `k8s/monitoring/prometheus-rule-besu.yaml`
+
+### Quick Access (Port-Forward)
+
+Grafana:
+```bash
+kubectl -n monitoring port-forward svc/monitoring-grafana 3000:80
+```
+Prometheus:
+```bash
+kubectl -n monitoring port-forward svc/monitoring-kube-prometheus-prometheus 9090:9090
+```
+Alertmanager:
+```bash
+kubectl -n monitoring port-forward svc/alertmanager-monitoring-kube-prometheus-alertmanager 9093:9093
+```
+
+### Grafana Dashboards
+
+Look for these dashboards:
+- `Besu QBFT Overview`
+- `Besu QBFT Validators`
+
+### Prometheus Queries
+
+Block height:
+```promql
+ethereum_blockchain_height
+```
+Peer count:
+```promql
+sum by (service) (besu_peers_peer_count_by_client{client="Besu"})
+```
+RPC error rate (non BLOCK_NOT_FOUND):
+```promql
+sum by (service) (rate(besu_rpc_errors_count_total{errorType!="BLOCK_NOT_FOUND"}[5m]))
+```
+
+### Alert Rules Installed
+
+These are loaded in Prometheus under the `besu.rules` group:
+- `BesuPeerCountLow` (peer count < 3 for 5m)
+- `BesuBlockStalled` (rpc-node block height not advancing for 5m)
+- `BesuRpcErrorsHigh` (non BLOCK_NOT_FOUND errors > 1 req/s for 5m)
+- `BesuNoPeersAndNoBlocks` (zero peers and no block growth for 5m)
+
+### Alertmanager Validation
+
+1. Open Alertmanager UI:
+```bash
+kubectl -n monitoring port-forward svc/alertmanager-monitoring-kube-prometheus-alertmanager 9093:9093
+```
+
+2. Visit:
+```
+http://127.0.0.1:9093
+```
+
+3. Verify alerts from `besu.rules` appear when conditions are met.
+
+### Observability Troubleshooting
+
+1. Metrics not showing in Prometheus targets:
+```bash
+kubectl -n monitoring port-forward svc/monitoring-kube-prometheus-prometheus 9090:9090
+```
+Open `http://127.0.0.1:9090/targets` and check that `rpc-node` + `validator1..5` targets are `UP`.
+
+2. Grafana dashboards not appearing:
+- Confirm the dashboard ConfigMaps exist and are labeled `grafana_dashboard: "1"`:
+```bash
+kubectl -n monitoring get configmap | grep grafana-dashboard-besu
+```
+
+3. Prometheus rules not loaded:
+```bash
+kubectl -n monitoring exec prometheus-monitoring-kube-prometheus-prometheus-0 -c prometheus -- \
+  wget -qO- http://127.0.0.1:9090/api/v1/rules | head -c 400
+```
+Look for the `besu.rules` group.
+
+### Alert Testing (Temporary)
+
+To validate Alertmanager notifications end-to-end, you can temporarily lower thresholds for a few minutes and then revert.
+
+Example (edit `k8s/monitoring/prometheus-rule-besu.yaml`):
+- Set `BesuPeerCountLow` threshold to `< 10`
+- Set `BesuBlockStalled` lookback to `[1m]` and `for: 1m`
+
+Apply, confirm alerts in Alertmanager, then restore the original values.
+
 ## Fast Troubleshooting
 
 1. Pods crash with `Option '--p2p-host' should be specified only once`.
