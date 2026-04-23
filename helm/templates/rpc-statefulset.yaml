@@ -63,6 +63,7 @@ metadata:
   namespace: {{ $.Values.namespace }}
 spec:
   clusterIP: None
+  publishNotReadyAddresses: true
   selector:
     app: {{ .Values.rpc.name }}
   ports:

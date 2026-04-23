@@ -5,6 +5,7 @@ metadata:
   namespace: blockchain
 spec:
   clusterIP: None
+  publishNotReadyAddresses: true
   selector:
     app: validator1
   ports:
@@ -22,6 +23,7 @@ metadata:
   namespace: blockchain
 spec:
   clusterIP: None
+  publishNotReadyAddresses: true
   selector:
     app: validator2
   ports:
@@ -39,6 +41,7 @@ metadata:
   namespace: blockchain
 spec:
   clusterIP: None
+  publishNotReadyAddresses: true
   selector:
     app: validator3
   ports:
@@ -56,6 +59,7 @@ metadata:
   namespace: blockchain
 spec:
   clusterIP: None
+  publishNotReadyAddresses: true
   selector:
     app: validator4
   ports:
@@ -73,6 +77,7 @@ metadata:
   namespace: blockchain
 spec:
   clusterIP: None
+  publishNotReadyAddresses: true
   selector:
     app: validator5
   ports:

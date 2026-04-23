@@ -153,6 +153,133 @@ Recorded on 2026-03-23 17:10 UTC after restoring full peer mesh.
 - Block height: `0x7` (7) and advancing
 - Peer count: `0x5` on `rpc-node` and all validators
 
+Recorded on 2026-04-23 14:28 UTC after recovering `worker2` and restoring peer discovery.
+
+- Block height: `0x37154` and advancing
+- Peer count: `0x5` on `rpc-node` and validators
+- Blockscout HTTP check: `200 OK`
+
+## Troubleshooting
+
+Use this section when Blockscout is stale, block height is not advancing, or some Besu pods are stuck after a node reboot/outage.
+
+### 1. Check cluster and blockchain status
+
+```bash
+kubectl get nodes -o wide
+kubectl get pods -n blockchain -o wide
+kubectl get pvc -n blockchain -o wide
+```
+
+What to look for:
+- a Kubernetes worker in `NotReady`
+- Besu pods stuck in `Terminating`
+- PVCs bound to local PVs on the failed node
+
+If a node is powered off and the blockchain PVs are local to that node, those pods cannot be moved elsewhere with their existing data. Recover the node first if possible.
+
+### 2. If a worker is down, recover the node first
+
+Typical symptoms:
+- `kubectl describe node <node>` shows `Kubelet stopped posting node status`
+- SSH to the worker fails
+- affected Besu pods sit on that worker in `Terminating`
+
+If the VM is hard powered off at the cloud provider, bring it back there first. Once the node returns as `Ready`, Kubernetes can reuse the existing local disks and recreate the StatefulSet pods on that node.
+
+### 3. Verify blockchain health after the node returns
+
+```bash
+kubectl get pods -n blockchain -o wide
+kubectl exec -n blockchain blockscout-<pod> -c blockscout -- sh -lc \
+  'curl -s -X POST http://rpc-node:8545 -H "Content-Type: application/json" \
+  --data "{\"jsonrpc\":\"2.0\",\"method\":\"net_peerCount\",\"params\":[],\"id\":1}"'
+kubectl exec -n blockchain blockscout-<pod> -c blockscout -- sh -lc \
+  'curl -s -X POST http://rpc-node:8545 -H "Content-Type: application/json" \
+  --data "{\"jsonrpc\":\"2.0\",\"method\":\"eth_blockNumber\",\"params\":[],\"id\":2}"'
+```
+
+Healthy signs:
+- all six Besu pods become `2/2 Running`
+- `net_peerCount` returns about `0x5`
+- `eth_blockNumber` increases over time
+
+### 4. If pods are running but block production is stalled
+
+This can happen after a cold restart if Besu rebuilt `/data/static-nodes.json` before all pod DNS records were resolvable.
+
+Symptoms:
+- pods are `Running`, but block height does not change
+- `net_peerCount` is `0x0` or `0x1`
+- `admin_peers` shows only a partial mesh
+- `/data/static-nodes.json` inside a pod contains only itself or one peer
+
+Check it with:
+
+```bash
+kubectl exec -n blockchain validator1-0 -c besu -- cat /data/static-nodes.json
+kubectl exec -n blockchain blockscout-<pod> -c blockscout -- sh -lc \
+  'curl -s -X POST http://validator2:8545 -H "Content-Type: application/json" \
+  --data "{\"jsonrpc\":\"2.0\",\"method\":\"admin_peers\",\"params\":[],\"id\":3}"'
+```
+
+### 5. Fix stalled peer discovery
+
+Headless services for StatefulSet members must publish pod DNS records before readiness, otherwise Besu cannot resolve its peers during startup.
+
+This repo now sets `publishNotReadyAddresses: true` on:
+- `validator1` through `validator5`
+- `rpc-node`
+
+If the live cluster was created before this fix, patch the services:
+
+```bash
+kubectl patch svc -n blockchain validator1 validator2 validator3 validator4 validator5 rpc-node \
+  --type merge -p '{"spec":{"publishNotReadyAddresses":true}}'
+```
+
+Then restart the Besu pods so they rebuild their peer lists:
+
+```bash
+kubectl delete pod -n blockchain rpc-node-0 validator1-0 validator2-0 validator3-0 validator4-0 validator5-0
+```
+
+After restart, verify:
+
+```bash
+kubectl exec -n blockchain validator1-0 -c besu -- cat /data/static-nodes.json
+kubectl exec -n blockchain blockscout-<pod> -c blockscout -- sh -lc \
+  'curl -s -X POST http://validator2:8545 -H "Content-Type: application/json" \
+  --data "{\"jsonrpc\":\"2.0\",\"method\":\"net_peerCount\",\"params\":[],\"id\":4}"'
+```
+
+Expected:
+- `static-nodes.json` lists all 6 nodes
+- peer count rises to `0x5`
+- block height starts advancing again
+
+### 6. Check Blockscout after consensus recovers
+
+```bash
+kubectl exec -n blockchain blockscout-<pod> -c blockscout -- sh -lc 'curl -I -s http://127.0.0.1:4000/'
+kubectl exec -n blockchain blockscout-<pod> -c blockscout -- sh -lc \
+  'curl -s -X POST http://rpc-node:8545 -H "Content-Type: application/json" \
+  --data "{\"jsonrpc\":\"2.0\",\"method\":\"eth_blockNumber\",\"params\":[],\"id\":5}"'
+```
+
+Expected:
+- Blockscout returns `HTTP/1.1 200 OK`
+- RPC returns a current block height
+
+### 7. Clean leftover test pods
+
+If old debug/test pods clutter the namespace:
+
+```bash
+kubectl delete pod -n blockchain curl-test curl-test-2 curl-test-3 curl-test-4 \
+  curl-test-5 curl-test-6 curl-test-7 curl-test-8 dns-test-6 dns-test-7
+```
+
 ## Interact With The Network
 
 With port-forward still active:
