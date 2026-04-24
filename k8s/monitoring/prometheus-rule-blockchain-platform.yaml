@@ -1,0 +1,41 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: blockchain-platform-alerts
+  namespace: monitoring
+  labels:
+    release: monitoring
+spec:
+  groups:
+    - name: blockchain.platform.rules
+      rules:
+        - alert: BlockchainWorkerNotReady
+          expr: (kube_node_status_condition{condition="Ready",status="true"} == 0) and on(node) kube_node_labels{label_node_role_kubernetes_io_blockchain!=""}
+          for: 5m
+          labels:
+            alert_scope: blockchain
+            namespace: blockchain
+            severity: critical
+          annotations:
+            summary: "Blockchain worker node not ready ({{ $labels.node }})"
+            description: "A Kubernetes node with the blockchain role has been NotReady for more than 5 minutes."
+        - alert: BlockchainStatefulSetReplicasMismatch
+          expr: kube_statefulset_replicas{namespace="blockchain",statefulset=~"rpc-node|validator[1-5]"} - kube_statefulset_status_replicas_ready{namespace="blockchain",statefulset=~"rpc-node|validator[1-5]"} > 0
+          for: 10m
+          labels:
+            alert_scope: blockchain
+            namespace: blockchain
+            severity: critical
+          annotations:
+            summary: "Blockchain StatefulSet not fully ready ({{ $labels.statefulset }})"
+            description: "A blockchain StatefulSet has missing ready replicas for more than 10 minutes."
+        - alert: BlockscoutDeploymentNotReady
+          expr: kube_deployment_status_replicas_available{namespace="blockchain",deployment="blockscout"} < 1
+          for: 10m
+          labels:
+            alert_scope: blockchain
+            namespace: blockchain
+            severity: warning
+          annotations:
+            summary: "Blockscout deployment unavailable"
+            description: "The Blockscout deployment has no available replicas for more than 10 minutes."

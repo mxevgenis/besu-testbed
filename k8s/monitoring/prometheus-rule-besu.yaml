@@ -13,6 +13,8 @@ spec:
           expr: sum by (service) (besu_peers_peer_count_by_client{client="Besu"}) < 3
           for: 5m
           labels:
+            alert_scope: blockchain
+            namespace: blockchain
             severity: warning
           annotations:
             summary: "Besu peer count low ({{ $labels.service }})"
@@ -21,6 +23,8 @@ spec:
           expr: changes(ethereum_blockchain_height{service="rpc-node"}[5m]) == 0
           for: 5m
           labels:
+            alert_scope: blockchain
+            namespace: blockchain
             severity: critical
           annotations:
             summary: "Besu block production stalled"
@@ -29,6 +33,8 @@ spec:
           expr: sum by (service) (rate(besu_rpc_errors_count_total{errorType!="BLOCK_NOT_FOUND"}[5m])) > 1
           for: 5m
           labels:
+            alert_scope: blockchain
+            namespace: blockchain
             severity: warning
           annotations:
             summary: "Besu RPC error rate elevated ({{ $labels.service }})"
@@ -37,6 +43,8 @@ spec:
           expr: (sum by (service) (besu_peers_peer_count_by_client{client="Besu"}) == 0) and (changes(ethereum_blockchain_height{service="rpc-node"}[5m]) == 0)
           for: 5m
           labels:
+            alert_scope: blockchain
+            namespace: blockchain
             severity: critical
           annotations:
             summary: "Besu has no peers and block production is stalled"

@@ -387,6 +387,8 @@ Besu exposes Prometheus metrics on port `9545`. This repo installs:
 - ServiceMonitor: `k8s/monitoring/servicemonitor-besu.yaml`
 - Grafana dashboards: `k8s/monitoring/grafana-dashboard-besu.yaml` and `k8s/monitoring/grafana-dashboard-besu-validators.yaml`
 - Alert rules: `k8s/monitoring/prometheus-rule-besu.yaml`
+- Platform alert rules: `k8s/monitoring/prometheus-rule-blockchain-platform.yaml`
+- Email notification templates: `k8s/monitoring/alertmanager-email-config.yaml` and `k8s/monitoring/alertmanager-email-secret.example.yaml`
 
 ### Quick Access (Port-Forward)
 
@@ -432,6 +434,63 @@ These are loaded in Prometheus under the `besu.rules` group:
 - `BesuRpcErrorsHigh` (non BLOCK_NOT_FOUND errors > 1 req/s for 5m)
 - `BesuNoPeersAndNoBlocks` (zero peers and no block growth for 5m)
 
+Additional blockchain platform alerts:
+- `BlockchainWorkerNotReady` (a Kubernetes node with the blockchain role is `NotReady` for 5m)
+- `BlockchainStatefulSetReplicasMismatch` (a validator or `rpc-node` StatefulSet is missing ready replicas for 10m)
+- `BlockscoutDeploymentNotReady` (Blockscout has no available replicas for 10m)
+
+### Email Alerts
+
+This cluster already runs Prometheus and Alertmanager, so the missing piece is only the notification receiver. The live Alertmanager currently uses a `null` receiver, which means alerts are evaluated but not sent anywhere.
+
+This repo now includes:
+- `k8s/monitoring/alertmanager-email-config.yaml`
+- `k8s/monitoring/alertmanager-email-secret.example.yaml`
+
+How it works:
+- Prometheus evaluates the Besu and blockchain platform rules.
+- Alerts labeled `alert_scope=blockchain` are routed by Alertmanager to an email receiver.
+- The receiver is defined with an `AlertmanagerConfig`, so you do not need to edit the Helm release internals.
+
+Setup:
+
+1. Create a real SMTP secret from the example:
+
+```bash
+cp k8s/monitoring/alertmanager-email-secret.example.yaml /tmp/alertmanager-email-secret.yaml
+```
+
+Edit `/tmp/alertmanager-email-secret.yaml` and replace `change-me` with your SMTP password or app password.
+
+2. Edit `k8s/monitoring/alertmanager-email-config.yaml` and replace:
+- `your-email@example.com`
+- `alerts@example.com`
+- `smtp.example.com:587`
+
+Use the SMTP provider you prefer, for example Gmail, Microsoft 365, Mailgun, SendGrid, or your own SMTP relay.
+
+3. Apply the rules and email receiver:
+
+```bash
+kubectl apply -f k8s/monitoring/prometheus-rule-besu.yaml
+kubectl apply -f k8s/monitoring/prometheus-rule-blockchain-platform.yaml
+kubectl apply -f /tmp/alertmanager-email-secret.yaml
+kubectl apply -f k8s/monitoring/alertmanager-email-config.yaml
+```
+
+4. Confirm Alertmanager picked up the new receiver:
+
+```bash
+kubectl -n monitoring port-forward svc/alertmanager-monitoring-kube-prometheus-alertmanager 9093:9093
+```
+
+Open `http://127.0.0.1:9093` and verify that blockchain alerts show the email receiver in their routing path.
+
+Recommended SMTP notes:
+- For Gmail, use an app password, not your normal account password.
+- For providers on port `587`, keep `requireTLS: true`.
+- Store the real SMTP password in a Secret only. Do not commit it into the repo.
+
 ### Alertmanager Validation
 
 1. Open Alertmanager UI:
@@ -445,6 +504,8 @@ http://127.0.0.1:9093
 ```
 
 3. Verify alerts from `besu.rules` appear when conditions are met.
+
+4. After email is configured, verify a test alert reaches your inbox.
 
 ### Observability Troubleshooting
 
@@ -466,6 +527,22 @@ kubectl -n monitoring exec prometheus-monitoring-kube-prometheus-prometheus-0 -c
   wget -qO- http://127.0.0.1:9090/api/v1/rules | head -c 400
 ```
 Look for the `besu.rules` group.
+
+4. Alertmanager has alerts but no email arrives:
+- Verify the SMTP values in `k8s/monitoring/alertmanager-email-config.yaml`.
+- Verify the Secret exists:
+```bash
+kubectl get secret -n blockchain blockchain-email-alerts
+```
+- Check the generated Alertmanager configuration:
+```bash
+kubectl get secret -n monitoring alertmanager-monitoring-kube-prometheus-alertmanager-generated \
+  -o jsonpath='{.data.alertmanager\\.yaml}' | base64 -d
+```
+- Check Alertmanager logs:
+```bash
+kubectl logs -n monitoring alertmanager-monitoring-kube-prometheus-alertmanager-0
+```
 
 ### Alert Testing (Temporary)
 

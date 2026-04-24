@@ -1,0 +1,36 @@
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: AlertmanagerConfig
+metadata:
+  name: blockchain-email-alerts
+  namespace: blockchain
+  labels:
+    release: monitoring
+spec:
+  route:
+    receiver: blockchain-email
+    groupBy:
+      - alertname
+      - severity
+      - namespace
+    groupWait: 30s
+    groupInterval: 5m
+    repeatInterval: 4h
+    matchers:
+      - name: alert_scope
+        matchType: "="
+        value: blockchain
+      - name: severity
+        matchType: "=~"
+        value: "warning|critical"
+  receivers:
+    - name: blockchain-email
+      emailConfigs:
+        - to: your-email@example.com
+          from: alerts@example.com
+          smarthost: smtp.example.com:587
+          authUsername: alerts@example.com
+          authPassword:
+            name: blockchain-email-alerts
+            key: smtpPassword
+          requireTLS: true
+          sendResolved: true
