@@ -1,13 +1,13 @@
 apiVersion: monitoring.coreos.com/v1alpha1
 kind: AlertmanagerConfig
 metadata:
-  name: blockchain-email-alerts
+  name: blockchain-discord-alerts
   namespace: blockchain
   labels:
     release: monitoring
 spec:
   route:
-    receiver: blockchain-email
+    receiver: blockchain-discord
     groupBy:
       - alertname
       - severity
@@ -23,14 +23,19 @@ spec:
         matchType: "=~"
         value: "warning|critical"
   receivers:
-    - name: blockchain-email
-      emailConfigs:
-        - to: your-email@example.com
-          from: alerts@example.com
-          smarthost: smtp.example.com:587
-          authUsername: alerts@example.com
-          authPassword:
-            name: blockchain-email-alerts
-            key: smtpPassword
-          requireTLS: true
+    - name: blockchain-discord
+      discordConfigs:
+        - apiURL:
+            name: blockchain-discord-alerts
+            key: webhookUrl
+          username: web3edu-testbed-alerts
+          title: '[{{ .Status | toUpper }}] {{ .CommonLabels.alertname }}'
+          message: |
+            Channel: #web3edu-testbed
+            Namespace: {{ .CommonLabels.namespace }}
+            Severity: {{ .CommonLabels.severity }}
+            {{ range .Alerts -}}
+            Summary: {{ .Annotations.summary }}
+            Description: {{ .Annotations.description }}
+            {{ end }}
           sendResolved: true

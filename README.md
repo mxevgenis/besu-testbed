@@ -388,7 +388,7 @@ Besu exposes Prometheus metrics on port `9545`. This repo installs:
 - Grafana dashboards: `k8s/monitoring/grafana-dashboard-besu.yaml` and `k8s/monitoring/grafana-dashboard-besu-validators.yaml`
 - Alert rules: `k8s/monitoring/prometheus-rule-besu.yaml`
 - Platform alert rules: `k8s/monitoring/prometheus-rule-blockchain-platform.yaml`
-- Email notification templates: `k8s/monitoring/alertmanager-email-config.yaml` and `k8s/monitoring/alertmanager-email-secret.example.yaml`
+- Alertmanager receiver config: `k8s/monitoring/alertmanager-email-config.yaml`
 
 ### Quick Access (Port-Forward)
 
@@ -439,42 +439,37 @@ Additional blockchain platform alerts:
 - `BlockchainStatefulSetReplicasMismatch` (a validator or `rpc-node` StatefulSet is missing ready replicas for 10m)
 - `BlockscoutDeploymentNotReady` (Blockscout has no available replicas for 10m)
 
-### Email Alerts
+### Discord Alerts
 
-This cluster already runs Prometheus and Alertmanager, so the missing piece is only the notification receiver. The live Alertmanager currently uses a `null` receiver, which means alerts are evaluated but not sent anywhere.
+This cluster uses Prometheus + Alertmanager for evaluation and routing, with Discord as the live notification receiver for blockchain alerts.
 
-This repo now includes:
+The repo includes:
 - `k8s/monitoring/alertmanager-email-config.yaml`
-- `k8s/monitoring/alertmanager-email-secret.example.yaml`
 
 How it works:
 - Prometheus evaluates the Besu and blockchain platform rules.
-- Alerts labeled `alert_scope=blockchain` are routed by Alertmanager to an email receiver.
+- Alerts labeled `alert_scope=blockchain` are routed by Alertmanager to a Discord receiver.
 - The receiver is defined with an `AlertmanagerConfig`, so you do not need to edit the Helm release internals.
+- The Discord webhook URL is stored in a Kubernetes `Secret`, not in the repo.
 
 Setup:
 
-1. Create a real SMTP secret from the example:
+1. Create the Discord webhook secret:
 
 ```bash
-cp k8s/monitoring/alertmanager-email-secret.example.yaml /tmp/alertmanager-email-secret.yaml
+kubectl create secret generic blockchain-discord-alerts \
+  -n blockchain \
+  --from-literal=webhookUrl='https://discord.com/api/webhooks/<id>/<token>'
 ```
 
-Edit `/tmp/alertmanager-email-secret.yaml` and replace `change-me` with your SMTP password or app password.
+2. Review `k8s/monitoring/alertmanager-email-config.yaml`.
+Despite the legacy filename, it now contains the Discord `AlertmanagerConfig`.
 
-2. Edit `k8s/monitoring/alertmanager-email-config.yaml` and replace:
-- `your-email@example.com`
-- `alerts@example.com`
-- `smtp.example.com:587`
-
-Use the SMTP provider you prefer, for example Gmail, Microsoft 365, Mailgun, SendGrid, or your own SMTP relay.
-
-3. Apply the rules and email receiver:
+3. Apply the rules and receiver:
 
 ```bash
 kubectl apply -f k8s/monitoring/prometheus-rule-besu.yaml
 kubectl apply -f k8s/monitoring/prometheus-rule-blockchain-platform.yaml
-kubectl apply -f /tmp/alertmanager-email-secret.yaml
 kubectl apply -f k8s/monitoring/alertmanager-email-config.yaml
 ```
 
@@ -484,12 +479,7 @@ kubectl apply -f k8s/monitoring/alertmanager-email-config.yaml
 kubectl -n monitoring port-forward svc/alertmanager-monitoring-kube-prometheus-alertmanager 9093:9093
 ```
 
-Open `http://127.0.0.1:9093` and verify that blockchain alerts show the email receiver in their routing path.
-
-Recommended SMTP notes:
-- For Gmail, use an app password, not your normal account password.
-- For providers on port `587`, keep `requireTLS: true`.
-- Store the real SMTP password in a Secret only. Do not commit it into the repo.
+Open `http://127.0.0.1:9093` and verify that blockchain alerts show the Discord receiver in their routing path.
 
 ### Alertmanager Validation
 
@@ -505,7 +495,7 @@ http://127.0.0.1:9093
 
 3. Verify alerts from `besu.rules` appear when conditions are met.
 
-4. After email is configured, verify a test alert reaches your inbox.
+4. After Discord is configured, verify a test alert reaches your channel.
 
 ### Observability Troubleshooting
 
@@ -528,11 +518,10 @@ kubectl -n monitoring exec prometheus-monitoring-kube-prometheus-prometheus-0 -c
 ```
 Look for the `besu.rules` group.
 
-4. Alertmanager has alerts but no email arrives:
-- Verify the SMTP values in `k8s/monitoring/alertmanager-email-config.yaml`.
+4. Alertmanager has alerts but no Discord message arrives:
 - Verify the Secret exists:
 ```bash
-kubectl get secret -n blockchain blockchain-email-alerts
+kubectl get secret -n blockchain blockchain-discord-alerts
 ```
 - Check the generated Alertmanager configuration:
 ```bash
@@ -543,6 +532,9 @@ kubectl get secret -n monitoring alertmanager-monitoring-kube-prometheus-alertma
 ```bash
 kubectl logs -n monitoring alertmanager-monitoring-kube-prometheus-alertmanager-0
 ```
+- If the logs show DNS resolution failures for `discord.com` or `discordapp.com`, check `nodelocaldns`.
+  Internal `cluster.local` lookups may still work while external names fail.
+- In this environment, a narrow `nodelocaldns` host override for Discord domains was used as a safe workaround instead of broader DNS surgery.
 
 ### Alert Testing (Temporary)
 
@@ -562,6 +554,13 @@ Apply, confirm alerts in Alertmanager, then restore the original values.
 2. Pods are healthy but no blocks (`eth_blockNumber` stuck) and `net_peerCount` is `0x0`.
 - Check `admin_peers` is empty or not.
 - Check startup script/ConfigMap was applied: `kubectl apply -f k8s/config/besu-startup-configmap.yaml`.
+- Check that the headless services publish not-ready endpoints so peers can resolve each other during cold start:
+
+```bash
+kubectl get svc -n blockchain validator1 validator2 validator3 validator4 validator5 rpc-node -o yaml | grep publishNotReadyAddresses
+```
+
+- If missing, re-apply the manifests in `k8s/validators/`, `k8s/rpc/`, or the Helm templates and restart the Besu pods.
 - Restart pods after config updates:
 
 ```bash
