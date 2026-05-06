@@ -55,7 +55,7 @@ kubectl rollout status statefulset/rpc-node -n blockchain
 
 ## Block Explorer (Optional)
 
-This deploys a Blockscout UI backed by an ephemeral Postgres (no PV). Data resets on pod restart. DB migrations run automatically on startup.
+This deploys a Blockscout UI backed by a persistent Postgres volume. The database now survives pod restarts and node recovery. DB migrations run automatically on startup.
 
 1. Set a real `SECRET_KEY_BASE`:
 
@@ -71,6 +71,11 @@ Put the output in `k8s/blockexplorer/blockscout.yaml` at `SECRET_KEY_BASE`.
 kubectl apply -f k8s/blockexplorer/postgres.yaml
 kubectl apply -f k8s/blockexplorer/blockscout.yaml
 ```
+
+Notes:
+- `k8s/blockexplorer/postgres.yaml` now requests a small `5Gi` PVC for Blockscout Postgres.
+- In this cluster, the claim is pinned to the available local PV `pv-w1-disk2`.
+- The PVC request is small, but because the storage class is `blockchain-local`, it still binds to one full local PV.
 
 3. Access the UI:
 
@@ -271,7 +276,63 @@ Expected:
 - Blockscout returns `HTTP/1.1 200 OK`
 - RPC returns a current block height
 
-### 7. Clean leftover test pods
+### 7. Recover Blockscout after DB or node instability
+
+If Blockscout is stuck in `Init`, check whether the `db-migrate` init container is still making progress:
+
+```bash
+kubectl describe pod -n blockchain blockscout-<pod>
+kubectl logs -n blockchain blockscout-<pod> -c db-migrate --tail=120
+```
+
+Healthy signs:
+- migrations are still advancing
+- the pod is waiting only on `db-migrate`
+
+If `blockscout-db` was still using ephemeral storage in an older deployment, a node reboot could recreate Postgres from zero and force a full schema rebuild. The persistent-storage fix for this repo is:
+- `k8s/blockexplorer/postgres.yaml`
+- PVC name: `blockscout-db-data`
+- requested size: `5Gi`
+- bound local PV in this cluster: `pv-w1-disk2`
+
+Verify it with:
+
+```bash
+kubectl get pvc -n blockchain blockscout-db-data -o wide
+kubectl get pod -n blockchain -l app=blockscout-db -o wide
+```
+
+Expected:
+- the PVC is `Bound`
+- `blockscout-db` is `2/2 Running`
+
+If Blockscout was restarted during a partial cluster outage and you end up with one healthy explorer pod plus one duplicate crashing rollout pod:
+
+```bash
+kubectl get rs,pods -n blockchain -l app=blockscout -o wide
+kubectl describe deployment -n blockchain blockscout
+```
+
+If the extra pod exists only because of a temporary rollout annotation, remove it so the deployment converges back to the healthy ReplicaSet:
+
+```bash
+kubectl patch deployment/blockscout -n blockchain --type=json \
+  -p='[{"op":"remove","path":"/spec/template/metadata/annotations/kubectl.kubernetes.io~1restartedAt"}]'
+```
+
+Then verify:
+
+```bash
+kubectl get rs,pods -n blockchain -l app=blockscout -o wide
+kubectl describe deployment -n blockchain blockscout
+```
+
+Expected:
+- only one Blockscout pod remains
+- the healthy ReplicaSet has `1/1`
+- the crashing duplicate scales down to `0`
+
+### 8. Clean leftover test pods
 
 If old debug/test pods clutter the namespace:
 
@@ -566,3 +627,25 @@ kubectl get svc -n blockchain validator1 validator2 validator3 validator4 valida
 ```bash
 kubectl delete pod -n blockchain validator1-0 validator2-0 validator3-0 validator4-0 validator5-0 rpc-node-0
 ```
+
+3. Blockscout DB rebuilds from scratch after a node reboot.
+- Check whether `blockscout-db` is still using `emptyDir` in an older manifest or live deployment.
+- The fixed manifest uses a PVC in [k8s/blockexplorer/postgres.yaml](/home/ubuntu/besu-testbed/k8s/blockexplorer/postgres.yaml).
+- Verify the claim:
+
+```bash
+kubectl get pvc -n blockchain blockscout-db-data -o wide
+```
+
+4. Blockscout has one healthy pod and one duplicate crashing init pod.
+- This usually means a temporary restart rollout was created during control-plane instability.
+- Remove the temporary template restart annotation and let the deployment reconcile:
+
+```bash
+kubectl patch deployment/blockscout -n blockchain --type=json \
+  -p='[{"op":"remove","path":"/spec/template/metadata/annotations/kubectl.kubernetes.io~1restartedAt"}]'
+kubectl get rs,pods -n blockchain -l app=blockscout -o wide
+```
+
+- Expected:
+  only one healthy Blockscout pod remains and the duplicate ReplicaSet scales to `0`.
