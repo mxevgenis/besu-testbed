@@ -21,14 +21,14 @@ spec:
             description: "A Kubernetes node with the blockchain role has been NotReady for more than 5 minutes."
         - alert: BlockchainStatefulSetReplicasMismatch
           expr: kube_statefulset_replicas{namespace="blockchain",statefulset=~"rpc-node|validator[1-5]"} - kube_statefulset_status_replicas_ready{namespace="blockchain",statefulset=~"rpc-node|validator[1-5]"} > 0
-          for: 10m
+          for: 20m
           labels:
             alert_scope: blockchain
             namespace: blockchain
-            severity: critical
+            severity: warning
           annotations:
             summary: "Blockchain StatefulSet not fully ready ({{ $labels.statefulset }})"
-            description: "A blockchain StatefulSet has missing ready replicas for more than 10 minutes."
+            description: "A blockchain StatefulSet has missing ready replicas for more than 20 minutes. This usually indicates a sustained workload issue rather than a short node or pod restart."
         - alert: BlockscoutDeploymentNotReady
           expr: kube_deployment_status_replicas_available{namespace="blockchain",deployment="blockscout"} < 1
           for: 10m
