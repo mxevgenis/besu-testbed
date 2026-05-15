@@ -40,6 +40,9 @@ spec:
         command:
         - /bin/sh
         - /scripts/besu-startup.sh
+        env:
+        - name: BESU_OPTS
+          value: -Xms512m -Xmx1024m
         args:
         - --genesis-file=/config/genesis.json
         - --data-path=/data
@@ -79,6 +82,13 @@ spec:
             port: 8545
           initialDelaySeconds: 300
           periodSeconds: 20
+        resources:
+          requests:
+            cpu: 250m
+            memory: 1Gi
+          limits:
+            cpu: "2"
+            memory: 1536Mi
         volumeMounts:
         - name: config
           mountPath: /config

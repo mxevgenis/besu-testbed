@@ -76,6 +76,10 @@ Notes:
 - `k8s/blockexplorer/postgres.yaml` now requests a small `5Gi` PVC for Blockscout Postgres.
 - In this cluster, the claim is pinned to the available local PV `pv-w1-disk2`.
 - The PVC request is small, but because the storage class is `blockchain-local`, it still binds to one full local PV.
+- Besu pods now use explicit memory settings to reduce eviction risk on `worker2`:
+  - `BESU_OPTS=-Xms512m -Xmx1024m`
+  - memory request: `1Gi`
+  - memory limit: `1536Mi`
 
 3. Access the UI:
 
@@ -209,6 +213,8 @@ Healthy signs:
 - `net_peerCount` returns about `0x5`
 - `eth_blockNumber` increases over time
 
+If one or more Besu pods show `1/2 Running` during this phase, that usually means the Istio sidecar is healthy but Besu is still warming up after restart. Check again after a few minutes before treating it as a persistent failure.
+
 ### 4. If pods are running but block production is stalled
 
 This can happen after a cold restart if Besu rebuilt `/data/static-nodes.json` before all pod DNS records were resolvable.
@@ -332,7 +338,38 @@ Expected:
 - the healthy ReplicaSet has `1/1`
 - the crashing duplicate scales down to `0`
 
-### 8. Clean leftover test pods
+### 8. Recover from Besu memory eviction on worker2
+
+If `rpc-node` or a validator periodically flips to `1/2`, check whether the pod was evicted for memory pressure instead of failing for a blockchain-specific reason.
+
+Typical symptoms:
+- `kubectl get pods -n blockchain -o wide` shows `1/2 Running`
+- `kubectl get events -n blockchain --sort-by=.lastTimestamp` shows `Evicted`
+- the event message contains `The node was low on resource: memory`
+- `kubectl describe pod -n blockchain rpc-node-0` shows the sidecar `Ready` while the Besu container is still failing readiness
+
+Check it with:
+
+```bash
+kubectl get events -n blockchain --sort-by=.lastTimestamp | tail -n 30
+kubectl describe pod -n blockchain rpc-node-0
+kubectl logs -n blockchain rpc-node-0 -c besu --tail=120
+```
+
+In this environment, `worker2` has intermittently evicted `rpc-node` because Besu was starting with roughly a 2 GiB heap and no explicit Kubernetes memory request. The fix now included in the repo is:
+- `BESU_OPTS=-Xms512m -Xmx1024m`
+- memory request: `1Gi`
+- memory limit: `1536Mi`
+
+Applied in:
+- `k8s/rpc/deployment.yaml`
+- `k8s/validators/validator1.yaml` through `validator5.yaml`
+- `helm/templates/rpc-statefulset.yaml`
+- `helm/templates/validator-statefulset.yaml`
+
+After applying the manifests, the StatefulSets will restart one by one. During that rollout, temporary `1/2` states are expected while Besu warms and passes readiness again.
+
+### 9. Clean leftover test pods
 
 If old debug/test pods clutter the namespace:
 
@@ -649,3 +686,14 @@ kubectl get rs,pods -n blockchain -l app=blockscout -o wide
 
 - Expected:
   only one healthy Blockscout pod remains and the duplicate ReplicaSet scales to `0`.
+
+5. `rpc-node` or a validator is `1/2` and Kubernetes reports `Evicted`.
+- This usually means `worker2` hit memory pressure, not that the chain data is corrupt.
+- Check:
+
+```bash
+kubectl get events -n blockchain --sort-by=.lastTimestamp | tail -n 30
+kubectl describe pod -n blockchain rpc-node-0
+```
+
+- The repo fix is to cap Besu heap and add explicit memory requests/limits in the StatefulSet manifests.
